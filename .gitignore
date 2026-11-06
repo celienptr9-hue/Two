@@ -1,0 +1,6 @@
+node_modules/
+.env
+data/
+secrets/
+public/app.bundle.js
+npm-debug.log*

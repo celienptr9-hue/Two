@@ -1,0 +1,29 @@
+{
+  "name": "lien-messagerie",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Application de messagerie avec inscription vérifiée, invitations et conversations en direct.",
+  "scripts": {
+    "build": "esbuild public/app.js --bundle --format=esm --outfile=public/app.bundle.js",
+    "start": "npm run build && node server.js",
+    "test": "npm run build && node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "@firebase/app": "^0.13.2",
+    "@firebase/auth": "^1.10.8",
+    "firebase-admin": "^13.5.0",
+    "helmet": "^8.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
+  }
+}
