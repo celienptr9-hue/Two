@@ -1,4 +1,4 @@
-import { initializeApp } from "@firebase/app";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {
   createUserWithEmailAndPassword,
   getAuth,
@@ -7,7 +7,24 @@ import {
   sendEmailVerification,
   signInWithEmailAndPassword,
   signOut,
-} from "@firebase/auth";
+} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getFirestore,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where,
+  writeBatch,
+} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { firebaseConfig } from "./firebase-config.js";
 
 const authScreen = document.querySelector("#auth-screen");
 const appScreen = document.querySelector("#app-screen");
@@ -20,18 +37,22 @@ const authPanels = {
 const state = {
   user: null,
   auth: null,
+  db: null,
   firebaseUser: null,
+  friendships: new Map(),
+  profiles: new Map(),
   conversations: [],
   activePeerId: null,
-  lastMessageId: 0,
-  conversationView: 0,
-  messageRefresh: null,
-  unreadPeerIds: new Set(),
-  eventController: null,
+  friendshipsUnsub: null,
+  messagesUnsub: null,
+  seenInitialFriendships: false,
+  syncVersion: 0,
+  markingRead: false,
   toastTimer: null,
   searchTimer: null,
-  seenInitialEvents: false,
 };
+
+/* ---------- Utilitaires d'interface ---------- */
 
 function showAuthPanel(name) {
   Object.entries(authPanels).forEach(([key, panel]) => {
@@ -51,24 +72,202 @@ function showToast(message) {
   state.toastTimer = window.setTimeout(() => toast.classList.remove("visible"), 3300);
 }
 
-async function api(url, options = {}) {
-  const headers = { ...(options.headers || {}) };
-  if (options.body !== undefined) headers["Content-Type"] = "application/json";
-  if (state.firebaseUser) {
-    headers.Authorization = `Bearer ${await state.firebaseUser.getIdToken()}`;
+function setButtonBusy(button, busy) {
+  if (!button) return;
+  if (busy) {
+    button.dataset.originalText = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<span class="spinner" aria-label="Chargement"></span>';
+  } else {
+    button.disabled = false;
+    if (button.dataset.originalText) {
+      button.innerHTML = button.dataset.originalText;
+      delete button.dataset.originalText;
+    }
   }
-  const response = await fetch(url, {
-    credentials: "same-origin",
-    ...options,
-    headers,
-  });
-  if (response.status === 204) return null;
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data.error || "Une erreur est survenue. Réessayez.");
-  }
-  return data;
 }
+
+function initials(firstName, lastName) {
+  return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase() || "?";
+}
+
+function avatarTone(seed) {
+  let total = 0;
+  for (const character of seed || "") total += character.charCodeAt(0);
+  return total % 5;
+}
+
+function avatarElement(user, extraClass = "") {
+  const avatar = document.createElement("div");
+  avatar.className = `avatar ${extraClass}`.trim();
+  avatar.dataset.tone = String(avatarTone(user.username || user.id || ""));
+  avatar.textContent = initials(user.firstName, user.lastName);
+  avatar.setAttribute("aria-hidden", "true");
+  return avatar;
+}
+
+function formatTime(date) {
+  if (!date) return "";
+  const value = new Date(date);
+  if (Number.isNaN(value.getTime())) return "";
+  const now = new Date();
+  if (value.toDateString() === now.toDateString()) {
+    return new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" }).format(value);
+  }
+  return new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" }).format(value);
+}
+
+function firebaseErrorMessage(error) {
+  const messages = {
+    "auth/email-already-in-use": "Un compte utilise déjà cette adresse e-mail. Essayez de vous connecter.",
+    "auth/invalid-email": "Veuillez saisir une adresse e-mail valide.",
+    "auth/invalid-credential": "Adresse e-mail ou mot de passe incorrect.",
+    "auth/too-many-requests": "Trop de tentatives. Réessayez plus tard.",
+    "auth/weak-password": "Choisissez un mot de passe d’au moins 10 caractères.",
+    "auth/network-request-failed": "Connexion impossible à Firebase. Vérifiez votre connexion Internet.",
+    "auth/operation-not-allowed": "Activez la connexion par e-mail et mot de passe dans Firebase Console.",
+    "auth/unauthorized-continue-uri": "Ajoutez votre domaine GitHub Pages dans Firebase > Authentication > Paramètres > Domaines autorisés.",
+    "permission-denied": "Action refusée. Vérifiez que les règles Firestore ont bien été publiées.",
+    unavailable: "Firestore est injoignable pour le moment. Réessayez.",
+  };
+  if (messages[error?.code]) return messages[error.code];
+  if (error?.message) return error.message;
+  return "Une erreur est survenue. Veuillez réessayer.";
+}
+
+/* ---------- Données (Firestore) ---------- */
+
+function pairIdFor(a, b) {
+  return [a, b].sort().join("_");
+}
+
+function peerOf(friendship) {
+  return friendship.members.find((member) => member !== state.user.id);
+}
+
+function toMillis(timestamp) {
+  return timestamp?.toMillis ? timestamp.toMillis() : 0;
+}
+
+function isUnread(friendship) {
+  const me = state.user.id;
+  if (!friendship.lastMessageAt || !friendship.lastSenderId || friendship.lastSenderId === me) return false;
+  return toMillis(friendship.lastMessageAt) > toMillis(friendship.readAt?.[me]);
+}
+
+async function getProfile(uid) {
+  if (state.profiles.has(uid)) return state.profiles.get(uid);
+  const snap = await getDoc(doc(state.db, "users", uid));
+  const user = snap.exists()
+    ? { id: snap.id, ...snap.data() }
+    : { id: uid, firstName: "Membre", lastName: "inconnu", username: "inconnu" };
+  state.profiles.set(uid, user);
+  return user;
+}
+
+function cachedProfile(uid) {
+  return state.profiles.get(uid) || { id: uid, firstName: "Membre", lastName: "", username: "membre" };
+}
+
+function buildConversations() {
+  return [...state.friendships.values()]
+    .filter((friendship) => friendship.status === "accepted")
+    .map((friendship) => {
+      const peerId = peerOf(friendship);
+      return {
+        id: friendship.id,
+        user: cachedProfile(peerId),
+        lastMessage: friendship.lastMessage || "",
+        lastMessageAt: friendship.lastMessageAt?.toDate ? friendship.lastMessageAt.toDate() : null,
+        sortTime: toMillis(friendship.lastMessageAt) || toMillis(friendship.createdAt),
+        unread: isUnread(friendship),
+      };
+    })
+    .sort((a, b) => b.sortTime - a.sortTime);
+}
+
+function buildInvitations() {
+  const me = state.user.id;
+  return [...state.friendships.values()]
+    .filter((friendship) => friendship.status === "pending" && friendship.to === me)
+    .map((friendship) => ({ id: friendship.id, user: cachedProfile(friendship.from) }));
+}
+
+function relationshipWith(peerId) {
+  const friendship = state.friendships.get(pairIdFor(state.user.id, peerId));
+  if (!friendship) return null;
+  return {
+    status: friendship.status,
+    direction: friendship.from === state.user.id ? "sent" : "received",
+  };
+}
+
+function subscribeToFriendships() {
+  state.friendshipsUnsub?.();
+  state.seenInitialFriendships = false;
+  const me = state.user.id;
+  const friendshipsQuery = query(
+    collection(state.db, "friendships"),
+    where("members", "array-contains", me),
+  );
+  state.friendshipsUnsub = onSnapshot(
+    friendshipsQuery,
+    async (snapshot) => {
+      const version = ++state.syncVersion;
+      const previous = state.friendships;
+
+      if (state.seenInitialFriendships) {
+        snapshot.docChanges().forEach((change) => {
+          const data = change.doc.data();
+          if (change.type === "added" && data.status === "pending" && data.to === me) {
+            showToast("Vous avez reçu une nouvelle invitation.");
+          }
+          if (
+            change.type === "modified" &&
+            data.status === "accepted" &&
+            data.from === me &&
+            previous.get(change.doc.id)?.status === "pending"
+          ) {
+            showToast("Votre invitation a été acceptée.");
+          }
+        });
+      }
+
+      const next = new Map();
+      snapshot.docs.forEach((item) => {
+        next.set(item.id, { id: item.id, ...item.data({ serverTimestamps: "estimate" }) });
+      });
+      state.friendships = next;
+      state.seenInitialFriendships = true;
+
+      await Promise.all(
+        [...next.values()].map((friendship) => getProfile(peerOf(friendship)).catch(() => null)),
+      );
+      if (version !== state.syncVersion || !state.user) return;
+      renderInvitations(buildInvitations());
+      renderConversations(buildConversations());
+      maybeMarkRead();
+    },
+    (error) => showToast(firebaseErrorMessage(error)),
+  );
+}
+
+function maybeMarkRead() {
+  if (!state.activePeerId || state.markingRead || !state.user) return;
+  const pid = pairIdFor(state.user.id, state.activePeerId);
+  const friendship = state.friendships.get(pid);
+  if (!friendship || friendship.status !== "accepted" || !isUnread(friendship)) return;
+  state.markingRead = true;
+  updateDoc(doc(state.db, "friendships", pid), {
+    [`readAt.${state.user.id}`]: serverTimestamp(),
+  })
+    .catch(() => {})
+    .finally(() => {
+      state.markingRead = false;
+    });
+}
+
+/* ---------- Authentification ---------- */
 
 function setAuthenticated(user) {
   state.user = user;
@@ -86,49 +285,23 @@ function showWorkspace() {
 }
 
 function leaveWorkspace() {
-  state.eventController?.abort();
-  state.eventController = null;
+  state.friendshipsUnsub?.();
+  state.messagesUnsub?.();
+  state.friendshipsUnsub = null;
+  state.messagesUnsub = null;
+  state.syncVersion += 1;
   state.firebaseUser = null;
   state.user = null;
+  state.friendships = new Map();
+  state.profiles = new Map();
   state.conversations = [];
   state.activePeerId = null;
-  state.lastMessageId = 0;
-  state.conversationView += 1;
-  state.messageRefresh = null;
-  state.unreadPeerIds.clear();
+  state.seenInitialFriendships = false;
   appScreen.classList.add("hidden");
   authScreen.classList.remove("hidden");
+  document.querySelector("#welcome-panel").classList.remove("hidden");
+  document.querySelector("#conversation-panel").classList.add("hidden");
   showAuthPanel("signup");
-}
-
-function initials(firstName, lastName) {
-  return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase() || "?";
-}
-
-function avatarTone(seed) {
-  let total = 0;
-  for (const character of seed) total += character.charCodeAt(0);
-  return total % 5;
-}
-
-function avatarElement(user, extraClass = "") {
-  const avatar = document.createElement("div");
-  avatar.className = `avatar ${extraClass}`.trim();
-  avatar.dataset.tone = String(avatarTone(user.username || user.id || ""));
-  avatar.textContent = initials(user.firstName, user.lastName);
-  avatar.setAttribute("aria-hidden", "true");
-  return avatar;
-}
-
-function formatTime(dateString) {
-  if (!dateString) return "";
-  const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) return "";
-  const now = new Date();
-  if (date.toDateString() === now.toDateString()) {
-    return new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" }).format(date);
-  }
-  return new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" }).format(date);
 }
 
 async function handleLogin(event) {
@@ -150,6 +323,10 @@ async function handleLogin(event) {
   }
 }
 
+function verificationSettings() {
+  return { url: window.location.origin + window.location.pathname };
+}
+
 async function handleSignup(event) {
   event.preventDefault();
   showFormError("#signup-error", "");
@@ -165,7 +342,7 @@ async function handleSignup(event) {
       `Firebase a envoyé un lien de vérification à ${result.user.email}. Ouvrez-le, puis revenez ici.`;
     showAuthPanel("verify");
     try {
-      await sendEmailVerification(result.user, { url: window.location.origin });
+      await sendEmailVerification(result.user, verificationSettings());
     } catch (error) {
       showFormError("#verify-error", firebaseErrorMessage(error));
     }
@@ -188,7 +365,6 @@ async function handleVerification(event) {
       showFormError("#verify-error", "Cliquez d’abord sur le lien reçu par e-mail, puis réessayez.");
       return;
     }
-    await state.firebaseUser.getIdToken(true);
     await handleFirebaseUser(state.firebaseUser);
   } catch (error) {
     showFormError("#verify-error", firebaseErrorMessage(error));
@@ -204,34 +380,36 @@ async function handleProfile(event) {
   const button = event.currentTarget.querySelector('button[type="submit"]');
   setButtonBusy(button, true);
   try {
-    const result = await api("/api/profile", {
-      method: "POST",
-      body: JSON.stringify({
-        firstName: form.get("firstName"),
-        lastName: form.get("lastName"),
-        username: form.get("username"),
-      }),
+    const uid = state.firebaseUser?.uid;
+    if (!uid) throw new Error("Reconnectez-vous pour créer votre profil.");
+    const firstName = String(form.get("firstName")).trim();
+    const lastName = String(form.get("lastName")).trim();
+    const username = String(form.get("username")).trim().replace(/^@/, "");
+    if (!firstName || !lastName) throw new Error("Indiquez votre prénom et votre nom.");
+    if (!/^[a-zA-Z0-9_]{3,24}$/.test(username)) {
+      throw new Error("L’identifiant doit contenir 3 à 24 lettres, chiffres ou tirets bas.");
+    }
+    const usernameLower = username.toLowerCase();
+    const taken = await getDoc(doc(state.db, "usernames", usernameLower));
+    if (taken.exists()) throw new Error("Cet identifiant est déjà pris. Essayez-en un autre.");
+
+    const batch = writeBatch(state.db);
+    batch.set(doc(state.db, "users", uid), {
+      firstName,
+      lastName,
+      username,
+      usernameLower,
+      createdAt: serverTimestamp(),
     });
-    setAuthenticated(result.user);
+    batch.set(doc(state.db, "usernames", usernameLower), { uid });
+    await batch.commit();
+
+    state.profiles.delete(uid);
+    setAuthenticated({ id: uid, firstName, lastName, username, usernameLower });
   } catch (error) {
-    showFormError("#profile-error", error.message);
+    showFormError("#profile-error", firebaseErrorMessage(error));
   } finally {
     setButtonBusy(button, false);
-  }
-}
-
-function setButtonBusy(button, busy) {
-  if (!button) return;
-  if (busy) {
-    button.dataset.originalText = button.innerHTML;
-    button.disabled = true;
-    button.innerHTML = '<span class="spinner" aria-label="Chargement"></span>';
-  } else {
-    button.disabled = false;
-    if (button.dataset.originalText) {
-      button.innerHTML = button.dataset.originalText;
-      delete button.dataset.originalText;
-    }
   }
 }
 
@@ -240,28 +418,13 @@ async function resendVerificationLink() {
   button.disabled = true;
   try {
     if (!state.firebaseUser) throw new Error("Reconnectez-vous pour demander un nouveau lien.");
-    await sendEmailVerification(state.firebaseUser, { url: window.location.origin });
+    await sendEmailVerification(state.firebaseUser, verificationSettings());
     showFormError("#verify-error", `Un nouveau lien a été envoyé à ${state.firebaseUser.email}.`);
   } catch (error) {
     showFormError("#verify-error", firebaseErrorMessage(error));
   } finally {
     window.setTimeout(() => { button.disabled = false; }, 1800);
   }
-}
-
-function firebaseErrorMessage(error) {
-  const messages = {
-    "auth/email-already-in-use": "Un compte utilise déjà cette adresse e-mail. Essayez de vous connecter.",
-    "auth/invalid-email": "Veuillez saisir une adresse e-mail valide.",
-    "auth/invalid-credential": "Adresse e-mail ou mot de passe incorrect.",
-    "auth/too-many-requests": "Trop de tentatives. Réessayez plus tard.",
-    "auth/weak-password": "Choisissez un mot de passe d’au moins 10 caractères.",
-    "auth/network-request-failed": "Connexion impossible à Firebase. Vérifiez votre connexion Internet.",
-    "auth/operation-not-allowed": "Activez la connexion par e-mail et mot de passe dans Firebase Console.",
-  };
-  if (messages[error?.code]) return messages[error.code];
-  if (error?.message) return error.message;
-  return "Une erreur est survenue. Veuillez réessayer.";
 }
 
 async function handleFirebaseUser(firebaseUser) {
@@ -275,11 +438,14 @@ async function handleFirebaseUser(firebaseUser) {
     showAuthPanel("verify");
     return;
   }
+  if (state.user?.id === firebaseUser.uid) return;
 
-  const result = await api("/api/me");
+  // Les règles Firestore lisent le jeton : on le rafraîchit pour qu'il indique "e-mail vérifié".
+  await firebaseUser.getIdToken(true);
+  const snap = await getDoc(doc(state.db, "users", firebaseUser.uid));
   if (state.auth.currentUser?.uid !== firebaseUser.uid) return;
-  if (result.user) {
-    setAuthenticated(result.user);
+  if (snap.exists()) {
+    setAuthenticated({ id: snap.id, ...snap.data() });
     return;
   }
   authScreen.classList.remove("hidden");
@@ -290,10 +456,12 @@ async function handleFirebaseUser(firebaseUser) {
 }
 
 async function initializeFirebase() {
-  const response = await fetch("/api/config");
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "La configuration Firebase est manquante.");
-  state.auth = getAuth(initializeApp(data.firebase));
+  if (!firebaseConfig?.apiKey || firebaseConfig.apiKey.startsWith("COLLEZ")) {
+    throw new Error("Configuration Firebase manquante : renseignez le fichier firebase-config.js.");
+  }
+  const app = initializeApp(firebaseConfig);
+  state.auth = getAuth(app);
+  state.db = getFirestore(app);
   onAuthStateChanged(state.auth, (firebaseUser) => {
     state.firebaseUser = firebaseUser;
     if (!firebaseUser) {
@@ -302,109 +470,18 @@ async function initializeFirebase() {
     }
     handleFirebaseUser(firebaseUser).catch((error) => {
       console.error("Impossible de charger le compte Firebase :", error);
-      showToast(error.message || "Impossible de charger votre compte.");
+      showToast(firebaseErrorMessage(error));
     });
   });
 }
 
 async function initializeWorkspace() {
-  const [conversationsResult, invitationsResult] = await Promise.all([
-    api("/api/conversations"),
-    api("/api/invitations"),
-  ]);
-  renderConversations(conversationsResult.conversations);
-  renderInvitations(invitationsResult.invitations);
-  connectToEvents();
+  renderConversations([]);
+  renderInvitations([]);
+  subscribeToFriendships();
 }
 
-function connectToEvents() {
-  state.eventController?.abort();
-  const controller = new AbortController();
-  state.eventController = controller;
-  consumeEvents(controller.signal).catch((error) => {
-    if (!controller.signal.aborted) {
-      console.error("Connexion en direct interrompue :", error);
-      showToast("La connexion en direct a été interrompue. Actualisez la page.");
-    }
-  });
-}
-
-async function consumeEvents(signal) {
-  while (!signal.aborted && state.firebaseUser) {
-    try {
-      const token = await state.firebaseUser.getIdToken();
-      const response = await fetch("/api/events", {
-        headers: { Authorization: `Bearer ${token}` },
-        signal,
-      });
-      if (!response.ok || !response.body) {
-        throw new Error("Impossible de démarrer la connexion en direct.");
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      try {
-        while (!signal.aborted) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const events = buffer.split("\n\n");
-          buffer = events.pop() || "";
-          for (const event of events) {
-            const dataLine = event.split("\n").find((line) => line.startsWith("data: "));
-            if (dataLine) handleLiveEvent(JSON.parse(dataLine.slice(6)));
-          }
-        }
-      } finally {
-        await reader.cancel().catch(() => {});
-      }
-    } catch (error) {
-      if (signal.aborted) return;
-      if (error.name === "AbortError") return;
-    }
-    if (!signal.aborted) {
-      await new Promise((resolve) => window.setTimeout(resolve, 1500));
-    }
-  }
-}
-
-function handleLiveEvent(data) {
-  if (data.type === "message") {
-    if (state.activePeerId !== data.peerId) state.unreadPeerIds.add(data.peerId);
-    refreshConversations();
-    if (state.activePeerId === data.peerId) refreshMessages();
-  } else if (data.type === "ready") {
-    refreshConversations();
-    if (state.activePeerId) refreshMessages();
-  } else if (data.type === "invitation") {
-    refreshInvitations();
-    showToast("Vous avez reçu une nouvelle invitation.");
-  } else if (data.type === "contacts") {
-    refreshInvitations();
-    refreshConversations();
-  }
-}
-
-async function refreshConversations() {
-  if (!state.user) return;
-  try {
-    const result = await api("/api/conversations");
-    renderConversations(result.conversations);
-  } catch (error) {
-    showToast(error.message);
-  }
-}
-
-async function refreshInvitations() {
-  if (!state.user) return;
-  try {
-    const result = await api("/api/invitations");
-    renderInvitations(result.invitations);
-  } catch (error) {
-    showToast(error.message);
-  }
-}
+/* ---------- Affichage des listes ---------- */
 
 function renderConversations(conversations) {
   state.conversations = conversations;
@@ -414,15 +491,11 @@ function renderConversations(conversations) {
   empty.classList.toggle("hidden", conversations.length > 0);
 
   conversations.forEach((conversation) => {
+    const isActive = conversation.user.id === state.activePeerId;
     const button = document.createElement("button");
     button.type = "button";
-    button.className = `conversation-item${conversation.user.id === state.activePeerId ? " active" : ""}`;
-    if (conversation.user.id === state.activePeerId) {
-      state.unreadPeerIds.delete(conversation.user.id);
-    } else if (conversation.unread) {
-      state.unreadPeerIds.add(conversation.user.id);
-    }
-    const hasUnreadMessage = state.unreadPeerIds.has(conversation.user.id);
+    button.className = `conversation-item${isActive ? " active" : ""}`;
+    const hasUnreadMessage = conversation.unread && !isActive;
     button.setAttribute(
       "aria-label",
       `Ouvrir la conversation avec ${conversation.user.firstName}${hasUnreadMessage ? ", nouveau message" : ""}`,
@@ -490,24 +563,28 @@ function renderInvitations(invitations) {
 
 async function respondToInvitation(id, action) {
   try {
-    const result = await api(`/api/invitations/${encodeURIComponent(id)}/${action}`, {
-      method: "POST",
-      body: JSON.stringify({}),
-    });
-    showToast(result.message);
-    await Promise.all([refreshInvitations(), refreshConversations()]);
+    const reference = doc(state.db, "friendships", id);
+    if (action === "accept") {
+      await updateDoc(reference, { status: "accepted" });
+      showToast("Invitation acceptée. Vous pouvez discuter.");
+    } else {
+      await deleteDoc(reference);
+      showToast("Invitation refusée.");
+    }
   } catch (error) {
-    showToast(error.message);
+    showToast(firebaseErrorMessage(error));
   }
 }
 
-function showSearchResult(parent, user, relationship) {
+/* ---------- Recherche d'amis ---------- */
+
+function showSearchResult(parent, user, relationship, note) {
   parent.replaceChildren();
   if (!user) {
-    const note = document.createElement("div");
-    note.className = "search-note";
-    note.textContent = "Aucun membre trouvé. Vérifiez son identifiant.";
-    parent.append(note);
+    const message = document.createElement("div");
+    message.className = "search-note";
+    message.textContent = note || "Aucun membre trouvé. Vérifiez son identifiant.";
+    parent.append(message);
     parent.classList.remove("hidden");
     return;
   }
@@ -529,7 +606,7 @@ function showSearchResult(parent, user, relationship) {
     invite.type = "button";
     invite.className = "mini-action";
     invite.textContent = "Inviter";
-    invite.addEventListener("click", () => sendInvitation(user.username));
+    invite.addEventListener("click", () => sendInvitation(user));
     row.append(invite);
   } else {
     const status = document.createElement("span");
@@ -558,52 +635,63 @@ function closeSearchResults() {
   document.querySelector("#friend-search").value = "";
 }
 
+async function findUserByUsername(username) {
+  const lookup = await getDoc(doc(state.db, "usernames", username.toLowerCase()));
+  if (!lookup.exists()) return null;
+  return getProfile(lookup.data().uid);
+}
+
 async function searchFriend(value) {
   const results = document.querySelector("#search-results");
   const username = value.trim().replace(/^@/, "");
-  if (username.length < 3) {
+  if (username.length < 3 || !/^[a-zA-Z0-9_]+$/.test(username)) {
     results.classList.add("hidden");
     return;
   }
   try {
-    const result = await api(`/api/search?username=${encodeURIComponent(username)}`);
+    const user = await findUserByUsername(username);
     if (document.querySelector("#friend-search").value.trim().replace(/^@/, "") !== username) return;
-    if (!result.user) {
+    if (!user) {
       showSearchResult(results, null, null);
       return;
     }
-    showSearchResult(results, result.user, result.relationship);
+    if (user.id === state.user.id) {
+      showSearchResult(results, null, null, "C’est votre propre identifiant.");
+      return;
+    }
+    showSearchResult(results, user, relationshipWith(user.id));
   } catch (error) {
-    results.replaceChildren();
-    const note = document.createElement("div");
-    note.className = "search-note";
-    note.textContent = error.message;
-    results.append(note);
-    results.classList.remove("hidden");
+    showSearchResult(results, null, null, firebaseErrorMessage(error));
   }
 }
 
-async function sendInvitation(username) {
+async function sendInvitation(user) {
+  const results = document.querySelector("#search-results");
   try {
-    const result = await api("/api/invitations", {
-      method: "POST",
-      body: JSON.stringify({ username }),
+    const me = state.user.id;
+    if (relationshipWith(user.id)) return;
+    await setDoc(doc(state.db, "friendships", pairIdFor(me, user.id)), {
+      members: [me, user.id],
+      from: me,
+      to: user.id,
+      status: "pending",
+      createdAt: serverTimestamp(),
+      readAt: {},
     });
-    showToast(result.message);
-    await searchFriend(username);
+    showToast("Invitation envoyée.");
+    showSearchResult(results, user, { status: "pending", direction: "sent" });
   } catch (error) {
-    showToast(error.message);
+    showToast(firebaseErrorMessage(error));
   }
 }
+
+/* ---------- Conversation ---------- */
 
 async function openConversation(peerId) {
   const conversation = state.conversations.find((item) => item.user.id === peerId);
   if (!conversation) return;
+  state.messagesUnsub?.();
   state.activePeerId = peerId;
-  state.conversationView += 1;
-  state.messageRefresh = null;
-  state.unreadPeerIds.delete(peerId);
-  state.lastMessageId = 0;
   document.querySelector("#welcome-panel").classList.add("hidden");
   const panel = document.querySelector("#conversation-panel");
   panel.classList.remove("hidden");
@@ -616,77 +704,54 @@ async function openConversation(peerId) {
   document.querySelector("#topbar-context").textContent =
     `EN CONVERSATION AVEC ${conversation.user.firstName.toUpperCase()}`;
   document.querySelector("#message-list").replaceChildren();
-  renderConversations(state.conversations);
+  showFormError("#message-error", "");
+  renderConversations(buildConversations());
   document.querySelector("#message-input").focus();
-  await refreshMessages();
+
+  const pid = pairIdFor(state.user.id, peerId);
+  const messagesQuery = query(
+    collection(state.db, "friendships", pid, "messages"),
+    orderBy("createdAt", "desc"),
+    limit(200),
+  );
+  state.messagesUnsub = onSnapshot(
+    messagesQuery,
+    (snapshot) => {
+      if (state.activePeerId !== peerId) return;
+      const messages = snapshot.docs
+        .map((item) => ({ id: item.id, ...item.data({ serverTimestamps: "estimate" }) }))
+        .reverse();
+      renderMessages(messages);
+      maybeMarkRead();
+    },
+    (error) => {
+      if (state.activePeerId === peerId) showFormError("#message-error", firebaseErrorMessage(error));
+    },
+  );
+  maybeMarkRead();
 }
 
-async function refreshMessages() {
-  if (!state.activePeerId) return;
-  const requestedPeer = state.activePeerId;
-  const requestedView = state.conversationView;
-  if (
-    state.messageRefresh?.peerId === requestedPeer &&
-    state.messageRefresh.view === requestedView
-  ) {
-    state.messageRefresh.refreshAgain = true;
-    return state.messageRefresh.promise;
-  }
-
-  const refresh = { peerId: requestedPeer, view: requestedView, refreshAgain: false };
-  state.messageRefresh = refresh;
-  refresh.promise = (async () => {
-    try {
-      do {
-        refresh.refreshAgain = false;
-        const after = state.lastMessageId > 0 ? `?after=${state.lastMessageId}` : "";
-        const result = await api(
-          `/api/conversations/${encodeURIComponent(requestedPeer)}/messages${after}`,
-        );
-        if (
-          requestedPeer !== state.activePeerId ||
-          requestedView !== state.conversationView
-        ) return;
-        renderMessages(result.messages, state.lastMessageId > 0);
-        state.unreadPeerIds.delete(requestedPeer);
-        refreshConversations();
-        if (result.messages.length === 200) refresh.refreshAgain = true;
-      } while (refresh.refreshAgain && requestedPeer === state.activePeerId &&
-        requestedView === state.conversationView);
-    } catch (error) {
-      if (
-        state.activePeerId === requestedPeer &&
-        state.conversationView === requestedView
-      ) showFormError("#message-error", error.message);
-    } finally {
-      if (state.messageRefresh === refresh) state.messageRefresh = null;
-    }
-  })();
-  return refresh.promise;
-}
-
-function renderMessages(messages, append) {
+function renderMessages(messages) {
   const list = document.querySelector("#message-list");
-  if (!append) list.replaceChildren();
+  list.replaceChildren();
   messages.forEach((message) => {
-    state.lastMessageId = Math.max(state.lastMessageId, message.id);
     const row = document.createElement("div");
     row.className = `message-row${message.senderId === state.user.id ? " own" : ""}`;
     const bubble = document.createElement("div");
     bubble.className = "message-bubble";
     bubble.textContent = message.body;
+    const date = message.createdAt?.toDate ? message.createdAt.toDate() : new Date();
     const time = document.createElement("time");
     time.className = "message-time";
-    time.dateTime = message.createdAt;
+    time.dateTime = date.toISOString();
     time.textContent = new Intl.DateTimeFormat("fr-FR", {
       hour: "2-digit",
       minute: "2-digit",
-    }).format(new Date(message.createdAt));
+    }).format(date);
     row.append(bubble, time);
     list.append(row);
   });
-  if (messages.length > 0) list.querySelector(".conversation-empty")?.remove();
-  if (!append && messages.length === 0) {
+  if (messages.length === 0) {
     const empty = document.createElement("p");
     empty.className = "conversation-empty";
     empty.textContent = "Un premier bonjour, et la conversation est lancée.";
@@ -704,16 +769,23 @@ async function sendMessage(event) {
   button.disabled = true;
   showFormError("#message-error", "");
   try {
-    const result = await api(
-      `/api/conversations/${encodeURIComponent(state.activePeerId)}/messages`,
-      { method: "POST", body: JSON.stringify({ body }) },
-    );
+    const pid = pairIdFor(state.user.id, state.activePeerId);
+    const batch = writeBatch(state.db);
+    batch.set(doc(collection(state.db, "friendships", pid, "messages")), {
+      senderId: state.user.id,
+      body,
+      createdAt: serverTimestamp(),
+    });
+    batch.update(doc(state.db, "friendships", pid), {
+      lastMessage: Array.from(body).slice(0, 200).join(""),
+      lastMessageAt: serverTimestamp(),
+      lastSenderId: state.user.id,
+    });
+    await batch.commit();
     input.value = "";
     resizeComposer(input);
-    renderMessages([result.message], true);
-    refreshConversations();
   } catch (error) {
-    showFormError("#message-error", error.message);
+    showFormError("#message-error", firebaseErrorMessage(error));
   } finally {
     button.disabled = false;
   }
@@ -737,8 +809,10 @@ function openFriendSearch() {
 
 function showFatalError(error) {
   console.error(error);
-  showToast(error.message || "Impossible de charger votre espace.");
+  showToast(firebaseErrorMessage(error) || "Impossible de charger votre espace.");
 }
+
+/* ---------- Événements ---------- */
 
 document.querySelector("#login-form").addEventListener("submit", handleLogin);
 document.querySelector("#signup-form").addEventListener("submit", handleSignup);
