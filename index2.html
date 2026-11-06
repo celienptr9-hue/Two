@@ -1,0 +1,787 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#fafaf9">
+    <meta name="description" content="Two, une messagerie simple et humaine pour garder le contact.">
+    <title>Two — la conversation continue</title>
+    <link rel="icon" type="image/svg+xml" href="/icon.svg">
+    <script>
+      /* Thème : appliqué avant l'affichage pour éviter tout flash.
+         Priorité : choix enregistré > préférence du système. */
+      (function () {
+        var root = document.documentElement;
+        var stored = null;
+        try { stored = localStorage.getItem("two-theme"); } catch (e) {}
+        var theme = stored === "light" || stored === "dark"
+          ? stored
+          : (window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        function apply(t) {
+          root.setAttribute("data-theme", t);
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute("content", t === "dark" ? "#0e100f" : "#fafaf9");
+          document.querySelectorAll("[data-theme-toggle]").forEach(function (b) {
+            b.setAttribute("aria-label", t === "dark" ? "Passer au thème clair" : "Passer au thème sombre");
+            b.setAttribute("title", t === "dark" ? "Thème clair" : "Thème sombre");
+          });
+        }
+        apply(theme);
+        document.addEventListener("DOMContentLoaded", function () { apply(theme); });
+        document.addEventListener("click", function (event) {
+          var button = event.target.closest && event.target.closest("[data-theme-toggle]");
+          if (!button) return;
+          theme = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+          try { localStorage.setItem("two-theme", theme); } catch (e) {}
+          apply(theme);
+        });
+        if (window.matchMedia) {
+          matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function (e) {
+            var saved = null;
+            try { saved = localStorage.getItem("two-theme"); } catch (err) {}
+            if (!saved) { theme = e.matches ? "dark" : "light"; apply(theme); }
+          });
+        }
+      })();
+    </script>
+    <style>
+/* ==========================================================
+   Two — design minimaliste, thèmes clair & sombre
+   Le thème est piloté par l'attribut data-theme sur <html>.
+   ========================================================== */
+
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #fafaf9;
+  --surface: #ffffff;
+  --surface-2: #f4f4f2;
+  --surface-3: #ecece9;
+  --border: #e7e7e3;
+  --border-strong: #d6d6d1;
+  --text: #171917;
+  --text-2: #55594f;
+  --text-3: #8a8e84;
+  --accent: #2f6553;
+  --accent-hover: #245043;
+  --accent-soft: #e8f0ec;
+  --on-accent: #ffffff;
+  --bubble-in: #f1f1ee;
+  --bubble-in-text: #1f221e;
+  --danger: #b4443c;
+  --ok: #4f9a6f;
+  --shadow-sm: 0 1px 2px rgb(20 24 20 / 5%);
+  --shadow-md: 0 8px 28px rgb(20 24 20 / 8%);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0e100f;
+  --surface: #151816;
+  --surface-2: #1c201d;
+  --surface-3: #252a26;
+  --border: #262b27;
+  --border-strong: #353b36;
+  --text: #ecefeb;
+  --text-2: #aab0a8;
+  --text-3: #7b827a;
+  --accent: #5fa688;
+  --accent-hover: #74b79b;
+  --accent-soft: #1b2b24;
+  --on-accent: #0b130f;
+  --bubble-in: #1f2420;
+  --bubble-in-text: #e6e9e4;
+  --danger: #e0766d;
+  --ok: #6fbf8e;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
+  --shadow-md: 0 10px 32px rgb(0 0 0 / 45%);
+}
+
+:root {
+  --radius: 10px;
+  --radius-sm: 8px;
+  --font: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.5;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  transition: background .2s ease, color .2s ease;
+}
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+a { color: inherit; }
+.hidden { display: none !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- Marque ---------- */
+.brand {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -.02em;
+  text-decoration: none;
+}
+.brand-mark {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--accent);
+}
+.brand-mark svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: var(--on-accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+/* ---------- Boutons génériques ---------- */
+.button {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 550;
+  text-decoration: none;
+  transition: background .15s, border-color .15s, opacity .15s;
+}
+.button-primary { background: var(--accent); color: var(--on-accent); }
+.button-primary:hover { background: var(--accent-hover); }
+.button-primary:disabled { cursor: wait; opacity: .7; }
+.button-secondary { border-color: var(--border-strong); background: transparent; color: var(--text); }
+.button-secondary:hover { background: var(--surface-2); }
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid color-mix(in srgb, var(--on-accent) 35%, transparent);
+  border-top-color: var(--on-accent);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.icon-button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-3);
+  transition: background .15s, color .15s;
+}
+.icon-button:hover { background: var(--surface-2); color: var(--text); }
+.icon-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
+
+/* Bouton de thème : soleil en sombre, lune en clair */
+.theme-toggle .icon-sun { display: none; }
+:root[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+:root[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+.auth-theme { position: absolute; z-index: 2; top: 24px; right: clamp(20px, 6vw, 72px); }
+
+.text-button {
+  padding: 8px 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 550;
+}
+.text-button:hover { color: var(--accent-hover); }
+
+/* ---------- Écran d'authentification ---------- */
+.auth-screen {
+  position: relative;
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  padding: 28px clamp(20px, 6vw, 72px) 24px;
+}
+.auth-layout {
+  display: grid;
+  width: min(1020px, 100%);
+  flex: 1;
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  gap: clamp(40px, 8vw, 110px);
+  margin: 24px auto 32px;
+}
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .08em;
+}
+.eyebrow-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.welcome-copy h1,
+.welcome-panel h1 {
+  margin: 20px 0 16px;
+  font-size: clamp(38px, 5vw, 60px);
+  font-weight: 650;
+  letter-spacing: -.035em;
+  line-height: 1.08;
+}
+.welcome-copy h1 em,
+.welcome-panel h1 em { color: var(--accent); font-style: normal; }
+.welcome-copy > p { max-width: 380px; margin: 0; color: var(--text-2); font-size: 16px; line-height: 1.65; }
+.welcome-note { display: flex; align-items: center; gap: 12px; margin-top: 32px; color: var(--text-2); font-size: 13px; }
+.note-avatars { display: flex; }
+.note-avatars span {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  margin-left: -6px;
+  place-items: center;
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+}
+.note-avatars span:first-child { margin-left: 0; }
+.welcome-note > svg { width: 16px; height: 16px; margin-left: 4px; fill: none; stroke: var(--text-3); stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.6; }
+
+.auth-card {
+  width: 100%;
+  padding: 28px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+.card-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 22px;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+}
+.online-indicator { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 450; letter-spacing: 0; }
+.online-indicator i, .topbar-private i, .conversation-encryption i { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+.auth-card h2 { margin: 0 0 6px; font-size: 22px; font-weight: 650; letter-spacing: -.02em; }
+.card-intro { margin: 0 0 22px; color: var(--text-2); font-size: 14px; line-height: 1.55; }
+.auth-form { display: flex; flex-direction: column; }
+.auth-form > label, .field-pair label { margin: 0 0 6px; color: var(--text-2); font-size: 13px; font-weight: 550; }
+.auth-form input {
+  width: 100%;
+  height: 42px;
+  margin-bottom: 16px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  outline: none;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.auth-form input::placeholder { color: var(--text-3); }
+.auth-form input:focus,
+.search-wrap input:focus,
+.composer:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.password-field { position: relative; margin-bottom: 16px; }
+.auth-form .password-field input { margin-bottom: 0; padding-right: 84px; }
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  padding: 4px 6px;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 550;
+}
+.password-toggle:hover { color: var(--text); background: var(--surface-2); }
+.label-row { display: flex; justify-content: space-between; }
+.auth-submit { width: 100%; margin-top: 2px; }
+.auth-divider { display: flex; align-items: center; gap: 12px; margin: 18px 0; color: var(--text-3); font-size: 12px; }
+.auth-divider::before, .auth-divider::after { height: 1px; flex: 1; background: var(--border); content: ""; }
+.auth-switch { width: 100%; }
+.form-message { min-height: 17px; margin: 10px 0 0; color: var(--danger); font-size: 13px; line-height: 1.5; }
+.form-message:empty { min-height: 0; margin-top: 0; }
+.small-legal { margin: 14px 0 0; color: var(--text-3); font-size: 12px; text-align: center; }
+.back-button { margin: -4px 0 18px; padding: 4px 0; border: 0; background: none; color: var(--text-3); font-size: 13px; }
+.back-button:hover { color: var(--text); }
+.step-icon { display: grid; width: 40px; height: 40px; margin-bottom: 16px; place-items: center; border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-size: 18px; }
+.field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.field-pair > div { display: flex; flex-direction: column; }
+.username-input { position: relative; }
+.username-input > span { position: absolute; top: 11px; left: 12px; color: var(--text-3); font-size: 14px; }
+.username-input input { padding-left: 28px; }
+.field-hint { margin: -8px 0 16px; color: var(--text-3); font-size: 12px; line-height: 1.5; }
+.auth-footer { display: flex; justify-content: space-between; gap: 12px; color: var(--text-3); font-size: 12px; }
+
+/* ---------- Application ---------- */
+.app-screen { display: flex; width: 100%; height: 100vh; min-height: 520px; overflow: hidden; background: var(--surface); }
+
+.sidebar {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  width: 300px;
+  min-width: 300px;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: var(--bg);
+  transition: width .22s ease, min-width .22s ease, transform .22s ease, background .2s;
+}
+.sidebar.collapsed { width: 0; min-width: 0; overflow: hidden; border-right: 0; }
+.sidebar-head { display: flex; height: 64px; flex-shrink: 0; align-items: center; justify-content: space-between; padding: 0 14px 0 18px; }
+
+.search-wrap { position: relative; margin: 4px 14px 18px; }
+.search-icon { position: absolute; top: 11px; left: 11px; width: 16px; height: 16px; fill: none; stroke: var(--text-3); stroke-linecap: round; stroke-width: 1.8; }
+.search-wrap input {
+  width: 100%;
+  height: 38px;
+  padding: 0 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.search-wrap input::placeholder { color: var(--text-3); }
+.search-shortcut { position: absolute; top: 9px; right: 12px; color: var(--text-3); font-size: 13px; pointer-events: none; }
+.search-results {
+  position: absolute;
+  z-index: 10;
+  top: 44px;
+  right: 0;
+  left: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+.search-result { display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
+.search-result + .search-result { border-top: 1px solid var(--border); }
+.search-result-info { min-width: 0; flex: 1; }
+.search-result-info strong, .search-result-info span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-result-info strong { font-size: 13px; font-weight: 600; }
+.search-result-info span { margin-top: 2px; color: var(--text-3); font-size: 12px; }
+.mini-action {
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 550;
+  white-space: nowrap;
+}
+.mini-action:hover { background: var(--surface-2); }
+.search-note { padding: 12px; color: var(--text-2); font-size: 13px; line-height: 1.5; }
+
+.sidebar-section { flex-shrink: 0; padding: 0 14px; }
+.section-heading { display: flex; height: 28px; align-items: center; justify-content: space-between; padding: 0 4px; color: var(--text-3); font-size: 11px; font-weight: 600; letter-spacing: .08em; }
+.count-pill { display: grid; min-width: 20px; height: 20px; padding: 0 6px; place-items: center; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-size: 11px; letter-spacing: 0; }
+.invitations-list { display: flex; flex-direction: column; gap: 6px; padding: 2px 0 10px; }
+.invitation-card { display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.invitation-person { min-width: 0; flex: 1; }
+.invitation-person strong, .invitation-person span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.invitation-person strong { font-size: 13px; font-weight: 600; }
+.invitation-person span { margin-top: 2px; color: var(--text-3); font-size: 12px; }
+.invitation-actions { display: flex; gap: 4px; }
+.invitation-actions button { padding: 6px 9px; border: 0; border-radius: 6px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 550; }
+.invitation-actions button:hover { background: var(--accent-hover); }
+.invitation-actions .decline-action { background: transparent; color: var(--text-2); }
+.invitation-actions .decline-action:hover { background: var(--surface-2); }
+
+.conversations-section { min-height: 0; flex: 1; padding-top: 8px; overflow-y: auto; }
+.section-action { display: grid; width: 24px; height: 24px; place-items: center; border: 1px solid var(--border); border-radius: 7px; background: transparent; color: var(--text-2); font-size: 16px; line-height: 1; }
+.section-action:hover { background: var(--surface-2); color: var(--text); }
+.conversations-list { display: flex; flex-direction: column; gap: 2px; padding-top: 4px; }
+.conversation-item { display: flex; width: 100%; min-height: 60px; align-items: center; gap: 12px; padding: 9px 10px; border: 0; border-radius: var(--radius); background: transparent; text-align: left; transition: background .15s; }
+.conversation-item:hover { background: var(--surface-2); }
+.conversation-item.active { background: var(--surface-3); }
+
+.avatar {
+  position: relative;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 650;
+}
+.avatar[data-tone="1"] { background: color-mix(in srgb, #c99a4a 18%, var(--surface)); color: #b68428; }
+.avatar[data-tone="2"] { background: color-mix(in srgb, #8e6fb0 18%, var(--surface)); color: #9a79bd; }
+.avatar[data-tone="3"] { background: color-mix(in srgb, #4f93a8 18%, var(--surface)); color: #4f93a8; }
+.avatar[data-tone="4"] { background: color-mix(in srgb, #c06b5a 18%, var(--surface)); color: #c06b5a; }
+.avatar-small { width: 34px; height: 34px; font-size: 12px; }
+
+.conversation-preview { min-width: 0; flex: 1; }
+.conversation-preview-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.conversation-preview strong { overflow: hidden; font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.conversation-preview time { flex-shrink: 0; color: var(--text-3); font-size: 11px; }
+.conversation-preview > span { display: block; overflow: hidden; margin-top: 3px; color: var(--text-3); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.unread-dot { width: 9px; height: 9px; flex-shrink: 0; border-radius: 50%; background: var(--accent); }
+
+.empty-sidebar { display: flex; flex-direction: column; align-items: flex-start; padding: 20px 6px; }
+.empty-illustration { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 10px; background: var(--surface-2); color: var(--accent); font-size: 18px; }
+.empty-sidebar p { max-width: 210px; margin: 12px 0 4px; color: var(--text-2); font-size: 13px; line-height: 1.55; }
+
+.profile-bar { display: flex; min-height: 66px; flex-shrink: 0; align-items: center; gap: 10px; padding: 10px 12px 10px 16px; border-top: 1px solid var(--border); }
+.profile-details { min-width: 0; flex: 1; }
+.profile-details strong, .profile-details span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-details strong { font-size: 13px; font-weight: 600; }
+.profile-details span { margin-top: 1px; color: var(--text-3); font-size: 12px; }
+
+/* ---------- Zone de chat ---------- */
+.chat-area { display: flex; min-width: 0; flex: 1; flex-direction: column; background: var(--surface); transition: background .2s; }
+.topbar { display: flex; height: 64px; flex-shrink: 0; align-items: center; gap: 10px; padding: 0 24px; border-bottom: 1px solid var(--border); }
+.topbar-context { overflow: hidden; color: var(--text-3); font-size: 11px; font-weight: 600; letter-spacing: .08em; text-overflow: ellipsis; white-space: nowrap; }
+.topbar-private { display: flex; align-items: center; gap: 7px; margin-left: auto; color: var(--text-3); font-size: 12px; white-space: nowrap; }
+.topbar .theme-toggle { margin-left: 4px; }
+.mobile-menu { display: none; }
+.sidebar-expand { display: none; }
+.sidebar.collapsed ~ .chat-area .sidebar-expand { display: grid; }
+.chat-content { position: relative; display: flex; min-height: 0; flex: 1; flex-direction: column; }
+
+.welcome-panel { position: relative; display: flex; width: 100%; flex: 1; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; padding: 48px 24px 72px; text-align: center; }
+.welcome-orbit { position: absolute; width: 560px; height: 560px; border: 1px solid var(--border); border-radius: 50%; opacity: .7; pointer-events: none; }
+.orbit-one { transform: scale(.75); }
+.orbit-two { transform: scale(1.15); }
+.welcome-symbol { position: relative; display: grid; width: 160px; height: 140px; margin-bottom: 20px; place-items: center; }
+.welcome-symbol > svg { z-index: 1; width: 96px; fill: var(--accent-soft); stroke: var(--accent); stroke-linecap: round; stroke-linejoin: round; stroke-width: 2.5; }
+.welcome-symbol > svg path:last-child { fill: none; stroke-width: 4; }
+.symbol-bubble { position: absolute; z-index: 2; padding: 7px 11px; border: 1px solid var(--border); border-radius: 12px 12px 12px 4px; background: var(--surface); box-shadow: var(--shadow-sm); color: var(--text-2); font-size: 12px; font-weight: 550; }
+.bubble-one { top: 2px; right: -10px; }
+.bubble-two { bottom: 8px; left: -4px; border-radius: 12px 12px 4px; }
+.welcome-panel h1 { margin: 16px 0 10px; font-size: clamp(30px, 4vw, 42px); letter-spacing: -.03em; line-height: 1.15; }
+.welcome-panel > p { max-width: 360px; margin: 0 0 22px; color: var(--text-2); font-size: 14px; line-height: 1.65; }
+.welcome-footer { position: absolute; bottom: 24px; display: flex; gap: 20px; color: var(--text-3); font-size: 12px; }
+.welcome-footer span + span::before { margin-right: 20px; content: "·"; }
+
+.conversation-panel { display: flex; width: 100%; min-height: 0; flex: 1; flex-direction: column; }
+.conversation-header { display: flex; min-height: 68px; flex-shrink: 0; align-items: center; gap: 12px; padding: 0 24px; border-bottom: 1px solid var(--border); }
+.conversation-person { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.conversation-person strong { font-size: 15px; font-weight: 600; }
+.conversation-person span { color: var(--text-3); font-size: 12px; }
+.conversation-encryption { display: inline-flex; align-items: center; gap: 7px; margin-left: auto; color: var(--text-3); font-size: 12px; white-space: nowrap; }
+
+.message-list { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 10px; padding: 24px clamp(16px, 5vw, 64px); overflow-y: auto; scroll-behavior: smooth; }
+.message-day { display: flex; align-items: center; justify-content: center; margin: 4px 0; color: var(--text-3); font-size: 11px; }
+.message-row { display: flex; max-width: min(72%, 560px); flex-direction: column; align-items: flex-start; gap: 4px; }
+.message-row.own { align-self: flex-end; align-items: flex-end; }
+.message-bubble { padding: 10px 14px; border-radius: 16px 16px 16px 4px; background: var(--bubble-in); color: var(--bubble-in-text); font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; white-space: pre-wrap; }
+.message-row.own .message-bubble { border-radius: 16px 16px 4px 16px; background: var(--accent); color: var(--on-accent); }
+.message-time { padding: 0 4px; color: var(--text-3); font-size: 11px; }
+.conversation-empty { align-self: center; margin: auto; color: var(--text-3); font-size: 13px; text-align: center; }
+
+.composer { flex-shrink: 0; margin: 12px clamp(16px, 5vw, 64px) 8px; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface); transition: border-color .15s, box-shadow .15s; }
+.composer textarea { display: block; width: 100%; min-height: 28px; max-height: 135px; resize: none; padding: 4px 2px 8px; border: 0; outline: none; background: transparent; color: var(--text); font-size: 14px; line-height: 1.5; box-shadow: none; }
+.composer textarea::placeholder { color: var(--text-3); }
+.composer-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.composer-bottom > span { color: var(--text-3); font-size: 11px; }
+.send-button { display: grid; width: 34px; height: 34px; flex-shrink: 0; place-items: center; border: 0; border-radius: 9px; background: var(--accent); color: var(--on-accent); transition: background .15s, opacity .15s; }
+.send-button:hover { background: var(--accent-hover); }
+.send-button:disabled { cursor: wait; opacity: .6; }
+.send-button svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+.message-error { min-height: 17px; margin: 0 0 8px; color: var(--danger); font-size: 12px; text-align: center; }
+.message-error:empty { min-height: 6px; margin: 0; }
+
+.toast {
+  position: fixed;
+  z-index: 30;
+  right: 24px;
+  bottom: 24px;
+  max-width: min(380px, calc(100vw - 32px));
+  padding: 12px 16px;
+  transform: translateY(8px);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s, transform .2s;
+}
+.toast.visible { transform: translateY(0); opacity: 1; }
+
+/* Barres de défilement discrètes */
+* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 900px) {
+  .auth-layout { grid-template-columns: minmax(0, 1fr) 380px; gap: 32px; }
+  .auth-card { padding: 24px; }
+  .sidebar { width: 280px; min-width: 280px; }
+}
+@media (max-width: 760px) {
+  .auth-screen { min-height: 100svh; padding: 76px 18px 18px; }
+  .auth-theme { top: 18px; right: 18px; }
+  .auth-brand { position: absolute; top: 20px; left: 18px; }
+  .auth-layout { width: min(440px, 100%); grid-template-columns: 1fr; gap: 28px; margin: 8px auto 24px; }
+  .welcome-copy h1 { margin: 14px 0 10px; font-size: 38px; }
+  .welcome-copy > p { font-size: 15px; }
+  .welcome-note { margin-top: 20px; }
+  .auth-footer { flex-direction: column; gap: 2px; }
+}
+@media (max-width: 680px) {
+  .app-screen { height: 100svh; min-height: 100svh; }
+  .sidebar { position: absolute; top: 0; bottom: 0; left: 0; width: min(310px, 88vw); min-width: min(310px, 88vw); box-shadow: 16px 0 40px rgb(0 0 0 / 18%); }
+  .sidebar.collapsed { transform: translateX(-100%); }
+  .sidebar.sidebar-mobile-open { transform: translateX(0); }
+  .sidebar.collapsed:not(.sidebar-mobile-open) { width: min(310px, 88vw); min-width: min(310px, 88vw); }
+  .chat-area { width: 100%; }
+  .topbar { height: 58px; padding: 0 12px; }
+  .mobile-menu { display: grid; }
+  .sidebar-expand { display: none !important; }
+  .topbar-private { display: none; }
+  .topbar .theme-toggle { margin-left: auto; }
+  .welcome-panel { padding-right: 18px; padding-left: 18px; }
+  .welcome-footer { gap: 12px; font-size: 11px; }
+  .welcome-footer span + span::before { margin-right: 12px; }
+  .conversation-header { min-height: 62px; padding: 0 16px; }
+  .message-list { padding: 20px 14px; }
+  .message-row { max-width: 86%; }
+  .composer { margin-right: 10px; margin-left: 10px; }
+  .composer-bottom > span { display: none; }
+  .composer-bottom { justify-content: flex-end; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+
+    </style>
+    <script type="module" src="/app.bundle.js"></script>
+  </head>
+  <body>
+    <main id="auth-screen" class="auth-screen">
+      <button class="icon-button theme-toggle auth-theme" type="button" data-theme-toggle aria-label="Passer au thème sombre" title="Thème sombre">
+        <svg class="icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>
+        <svg class="icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+
+      <a class="brand auth-brand" href="/" aria-label="Two, accueil">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32"><path d="M16 5.5c-6.1 0-11 4.1-11 9.2 0 2.7 1.4 5.1 3.6 6.8L7.5 26l5.8-1.7a12.8 12.8 0 0 0 3 .3c6.1 0 11-4.1 11-9.2S22.3 5.5 16 5.5Z"/><path d="M11.5 14.7h.01m4.5 0h.01m4.5 0h.01"/></svg>
+        </span>
+        <span>Two</span>
+      </a>
+
+      <div class="auth-layout">
+        <section class="welcome-copy">
+          <span class="eyebrow"><span class="eyebrow-dot"></span> LES BONNES CONVERSATIONS, TOUT SIMPLEMENT</span>
+          <h1>Un petit mot<br>change <em>tout.</em></h1>
+          <p>Retrouvez les gens qui comptent. Sans bruit, sans détour — juste vous et eux.</p>
+          <div class="welcome-note">
+            <div class="note-avatars" aria-hidden="true"><span>A</span><span>M</span><span>J</span></div>
+            <span>Des conversations qui font du bien.</span>
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5"/></svg>
+          </div>
+        </section>
+
+        <section class="auth-card" aria-labelledby="auth-title">
+          <div class="card-topline"><span>VOTRE ESPACE, À VOUS</span><span class="online-indicator"><i></i> votre espace personnel</span></div>
+          <div id="auth-step" class="hidden">
+            <h2 id="auth-title">Bienvenue chez vous.</h2>
+            <p class="card-intro">Connectez-vous pour retrouver vos conversations.</p>
+            <form id="login-form" class="auth-form">
+              <label for="login-email">Adresse e-mail</label>
+              <input id="login-email" name="email" type="email" placeholder="vous@exemple.fr" autocomplete="email" required>
+              <div class="label-row"><label for="login-password">Mot de passe</label></div>
+              <div class="password-field">
+                <input id="login-password" name="password" type="password" placeholder="Votre mot de passe" autocomplete="current-password" required>
+                <button class="password-toggle" type="button" data-password-toggle aria-controls="login-password" aria-label="Afficher le mot de passe" aria-pressed="false">Afficher</button>
+              </div>
+              <button class="button button-primary auth-submit" type="submit">Se connecter <span aria-hidden="true">→</span></button>
+            </form>
+            <div class="auth-divider"><span>ou</span></div>
+            <button id="switch-signup" class="button button-secondary auth-switch" type="button">Créer mon compte</button>
+            <p id="auth-error" class="form-message" role="status" aria-live="polite"></p>
+          </div>
+
+          <div id="signup-step">
+            <button class="back-button" type="button" data-auth-back>← Retour</button>
+            <h2>Bienvenue chez vous.</h2>
+            <p class="card-intro">Créez votre compte pour retrouver les gens qui comptent.</p>
+            <form id="signup-form" class="auth-form">
+              <label for="signup-email">Adresse e-mail</label>
+              <input id="signup-email" name="email" type="email" placeholder="vous@exemple.fr" autocomplete="email" required>
+              <label for="signup-password">Mot de passe</label>
+              <div class="password-field">
+                <input id="signup-password" name="password" type="password" placeholder="10 caractères minimum" autocomplete="new-password" minlength="10" required>
+                <button class="password-toggle" type="button" data-password-toggle aria-controls="signup-password" aria-label="Afficher le mot de passe" aria-pressed="false">Afficher</button>
+              </div>
+              <button class="button button-primary auth-submit" type="submit">Créer mon compte <span aria-hidden="true">→</span></button>
+            </form>
+            <p id="signup-error" class="form-message" role="status" aria-live="polite"></p>
+            <div class="auth-divider"><span>ou</span></div>
+            <button id="switch-login" class="button button-secondary auth-switch" type="button">J’ai déjà un compte — me connecter</button>
+            <p class="small-legal">Votre adresse e-mail n’est visible que par vous.</p>
+          </div>
+
+          <div id="verify-step" class="hidden">
+            <button id="verification-logout" class="back-button" type="button">← Utiliser une autre adresse</button>
+            <span class="step-icon" aria-hidden="true">✉</span>
+            <h2>Vérifiez votre adresse e-mail.</h2>
+            <p class="card-intro">Un lien de vérification Firebase vient d’être envoyé à votre adresse e-mail.</p>
+            <form id="verify-form" class="auth-form">
+              <button class="button button-primary auth-submit" type="submit">J’ai vérifié mon adresse <span aria-hidden="true">→</span></button>
+            </form>
+            <button id="resend-code" class="text-button" type="button">Renvoyer le lien</button>
+            <p id="verify-error" class="form-message" role="status" aria-live="polite"></p>
+          </div>
+
+          <div id="profile-step" class="hidden">
+            <button id="profile-logout" class="back-button" type="button">← Retour</button>
+            <h2>Et vous, c’est qui ?</h2>
+            <p class="card-intro">Choisissez le nom et l’identifiant que vos amis verront.</p>
+            <form id="profile-form" class="auth-form">
+              <div class="field-pair">
+                <div><label for="profile-first-name">Prénom</label><input id="profile-first-name" name="firstName" autocomplete="given-name" maxlength="50" required></div>
+                <div><label for="profile-last-name">Nom</label><input id="profile-last-name" name="lastName" autocomplete="family-name" maxlength="50" required></div>
+              </div>
+              <label for="profile-username">Identifiant</label>
+              <div class="username-input"><span>@</span><input id="profile-username" name="username" minlength="3" maxlength="24" pattern="[a-zA-Z0-9_]{3,24}" placeholder="votreidentifiant" autocomplete="username" required></div>
+              <p class="field-hint">3 à 24 lettres, chiffres ou tirets bas. Vous pourrez le partager pour être retrouvé.</p>
+              <button class="button button-primary auth-submit" type="submit">C’est parti <span aria-hidden="true">→</span></button>
+            </form>
+            <p id="profile-error" class="form-message" role="status" aria-live="polite"></p>
+          </div>
+        </section>
+      </div>
+      <footer class="auth-footer"><span>Fait pour garder le lien.</span><span>Un espace privé, rien qu’à vous.</span></footer>
+    </main>
+
+    <div id="app-screen" class="app-screen hidden">
+      <aside id="sidebar" class="sidebar">
+        <div class="sidebar-head">
+          <a class="brand sidebar-brand" href="/" aria-label="Two, accueil"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M16 5.5c-6.1 0-11 4.1-11 9.2 0 2.7 1.4 5.1 3.6 6.8L7.5 26l5.8-1.7a12.8 12.8 0 0 0 3 .3c6.1 0 11-4.1 11-9.2S22.3 5.5 16 5.5Z"/><path d="M11.5 14.7h.01m4.5 0h.01m4.5 0h.01"/></svg></span><span>Two</span></a>
+          <button id="sidebar-toggle" class="icon-button sidebar-collapse" type="button" aria-label="Ranger la barre latérale" title="Ranger la barre latérale"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"/><path d="m9 9 3 3-3 3"/></svg></button>
+        </div>
+
+        <div class="search-wrap">
+          <label class="sr-only" for="friend-search">Chercher un ami par son identifiant</label>
+          <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4 4"/></svg>
+          <input id="friend-search" type="search" placeholder="Trouver un ami" autocomplete="off">
+          <span class="search-shortcut">⌕</span>
+          <div id="search-results" class="search-results hidden" role="status"></div>
+        </div>
+
+        <section class="sidebar-section request-section">
+          <div class="section-heading"><span>INVITATIONS</span><span id="invitation-count" class="count-pill hidden">0</span></div>
+          <div id="invitations-list" class="invitations-list"></div>
+        </section>
+        <section class="sidebar-section conversations-section">
+          <div class="section-heading"><span>MESSAGES</span><button id="new-message" class="section-action" type="button" aria-label="Chercher un ami">+</button></div>
+          <div id="conversations-list" class="conversations-list"></div>
+          <div id="empty-conversations" class="empty-sidebar">
+            <span class="empty-illustration" aria-hidden="true">♡</span>
+            <p>Les bonnes conversations commencent par un bonjour.</p>
+            <button id="find-friends" class="text-button" type="button">Trouver un ami <span aria-hidden="true">→</span></button>
+          </div>
+        </section>
+
+        <div class="profile-bar">
+          <div id="profile-avatar" class="avatar avatar-small">L</div>
+          <div class="profile-details"><strong id="profile-name">Mon compte</strong><span id="profile-handle">@membre</span></div>
+          <button id="logout-button" class="icon-button logout-button" type="button" title="Se déconnecter" aria-label="Se déconnecter"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7"/></svg></button>
+        </div>
+      </aside>
+
+      <main class="chat-area">
+        <header class="topbar">
+          <button id="sidebar-reopen" class="icon-button sidebar-expand" type="button" aria-label="Afficher la barre latérale" title="Afficher la barre latérale"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"/><path d="m15 9-3 3 3 3"/></svg></button>
+          <button id="mobile-sidebar-toggle" class="icon-button mobile-menu" type="button" aria-label="Afficher les conversations"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"/></svg></button>
+          <span id="topbar-context" class="topbar-context">VOTRE ESPACE DE CONVERSATION</span>
+          <span class="topbar-private"><i></i> Messages partagés avec vos contacts</span>
+          <button class="icon-button theme-toggle" type="button" data-theme-toggle aria-label="Passer au thème sombre" title="Thème sombre">
+            <svg class="icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>
+            <svg class="icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+          </button>
+        </header>
+        <section id="chat-content" class="chat-content">
+          <div id="welcome-panel" class="welcome-panel">
+            <div class="welcome-orbit orbit-one"></div><div class="welcome-orbit orbit-two"></div>
+            <div class="welcome-symbol" aria-hidden="true">
+              <span class="symbol-bubble bubble-one">salut !</span><span class="symbol-bubble bubble-two">coucou :)</span>
+              <svg viewBox="0 0 112 112"><path d="M55.9 14c-23.1 0-41.8 15.5-41.8 34.6 0 10.1 5.3 19.2 13.8 25.5L23 92l21.5-6.3a48.8 48.8 0 0 0 11.4 1.3c23.1 0 41.8-15.5 41.8-34.6S79 14 55.9 14Z"/><path d="M39 49h.1M55 49h.1M71 49h.1"/></svg>
+            </div>
+            <span class="eyebrow welcome-eyebrow"><span class="eyebrow-dot"></span> TOUT EST EN PLACE</span>
+            <h1>Les conversations<br><em>commencent ici.</em></h1>
+            <p>Choisissez un ami dans la liste ou cherchez son identifiant pour lui dire bonjour.</p>
+            <button id="welcome-find-friend" class="button button-primary" type="button">Trouver un ami <span aria-hidden="true">→</span></button>
+            <div class="welcome-footer"><span>À votre rythme.</span><span>En toute simplicité.</span><span>Juste vous.</span></div>
+          </div>
+
+          <section id="conversation-panel" class="conversation-panel hidden">
+            <header class="conversation-header">
+              <div id="conversation-avatar" class="avatar">A</div>
+              <div class="conversation-person"><strong id="conversation-name">Ami</strong><span id="conversation-handle">@ami</span></div>
+              <span class="conversation-encryption"><i></i> En tête-à-tête</span>
+            </header>
+            <div id="message-list" class="message-list" role="log" aria-live="polite" aria-label="Messages de la conversation"></div>
+            <form id="message-form" class="composer">
+              <label class="sr-only" for="message-input">Votre message</label>
+              <textarea id="message-input" rows="1" maxlength="4000" placeholder="Écrivez un message…" required></textarea>
+              <div class="composer-bottom"><span>Entrée pour envoyer · Maj + Entrée pour aller à la ligne</span><button class="send-button" type="submit" aria-label="Envoyer le message" title="Envoyer le message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 3-7.2 18-3.9-7.9L2 9.2 21 3Z"/><path d="M21 3 9.9 13.1"/></svg></button></div>
+            </form>
+            <p id="message-error" class="message-error" role="status" aria-live="polite"></p>
+          </section>
+        </section>
+      </main>
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    </div>
+  </body>
+</html>
