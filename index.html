@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f6f7f3">
+    <meta name="description" content="Two, une messagerie simple et humaine pour garder le contact.">
+    <title>Two — la conversation continue</title>
+    <link rel="icon" type="image/svg+xml" href="/icon.svg">
+    <link rel="stylesheet" href="/styles.css">
+    <script type="module" src="/app.bundle.js"></script>
+  </head>
+  <body>
+    <main id="auth-screen" class="auth-screen">
+      <a class="brand auth-brand" href="/" aria-label="Two, accueil">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32"><path d="M16 5.5c-6.1 0-11 4.1-11 9.2 0 2.7 1.4 5.1 3.6 6.8L7.5 26l5.8-1.7a12.8 12.8 0 0 0 3 .3c6.1 0 11-4.1 11-9.2S22.3 5.5 16 5.5Z"/><path d="M11.5 14.7h.01m4.5 0h.01m4.5 0h.01"/></svg>
+        </span>
+        <span>Two</span>
+      </a>
+
+      <div class="auth-layout">
+        <section class="welcome-copy">
+          <span class="eyebrow"><span class="eyebrow-dot"></span> LES BONNES CONVERSATIONS, TOUT SIMPLEMENT</span>
+          <h1>Un petit mot<br>change <em>tout.</em></h1>
+          <p>Retrouvez les gens qui comptent. Sans bruit, sans détour — juste vous et eux.</p>
+          <div class="welcome-note">
+            <div class="note-avatars" aria-hidden="true"><span>A</span><span>M</span><span>J</span></div>
+            <span>Des conversations qui font du bien.</span>
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5"/></svg>
+          </div>
+        </section>
+
+        <section class="auth-card" aria-labelledby="auth-title">
+          <div class="card-topline"><span>VOTRE ESPACE, À VOUS</span><span class="online-indicator"><i></i> votre espace personnel</span></div>
+          <div id="auth-step" class="hidden">
+            <h2 id="auth-title">Bienvenue chez vous.</h2>
+            <p class="card-intro">Connectez-vous pour retrouver vos conversations.</p>
+            <form id="login-form" class="auth-form">
+              <label for="login-email">Adresse e-mail</label>
+              <input id="login-email" name="email" type="email" placeholder="vous@exemple.fr" autocomplete="email" required>
+              <div class="label-row"><label for="login-password">Mot de passe</label></div>
+              <div class="password-field">
+                <input id="login-password" name="password" type="password" placeholder="Votre mot de passe" autocomplete="current-password" required>
+                <button class="password-toggle" type="button" data-password-toggle aria-controls="login-password" aria-label="Afficher le mot de passe" aria-pressed="false">Afficher</button>
+              </div>
+              <button class="button button-primary auth-submit" type="submit">Se connecter <span aria-hidden="true">→</span></button>
+            </form>
+            <div class="auth-divider"><span>ou</span></div>
+            <button id="switch-signup" class="button button-secondary auth-switch" type="button">Créer mon compte</button>
+            <p id="auth-error" class="form-message" role="status" aria-live="polite"></p>
+          </div>
+
+          <div id="signup-step">
+            <button class="back-button" type="button" data-auth-back>← Retour</button>
+            <h2>Bienvenue chez vous.</h2>
+            <p class="card-intro">Créez votre compte pour retrouver les gens qui comptent.</p>
+            <form id="signup-form" class="auth-form">
+              <label for="signup-email">Adresse e-mail</label>
+              <input id="signup-email" name="email" type="email" placeholder="vous@exemple.fr" autocomplete="email" required>
+              <label for="signup-password">Mot de passe</label>
+              <div class="password-field">
+                <input id="signup-password" name="password" type="password" placeholder="10 caractères minimum" autocomplete="new-password" minlength="10" required>
+                <button class="password-toggle" type="button" data-password-toggle aria-controls="signup-password" aria-label="Afficher le mot de passe" aria-pressed="false">Afficher</button>
+              </div>
+              <button class="button button-primary auth-submit" type="submit">Créer mon compte <span aria-hidden="true">→</span></button>
+            </form>
+            <p id="signup-error" class="form-message" role="status" aria-live="polite"></p>
+            <div class="auth-divider"><span>ou</span></div>
+            <button id="switch-login" class="button button-secondary auth-switch" type="button">J’ai déjà un compte — me connecter</button>
+            <p class="small-legal">Votre adresse e-mail n’est visible que par vous.</p>
+          </div>
+
+          <div id="verify-step" class="hidden">
+            <button id="verification-logout" class="back-button" type="button">← Utiliser une autre adresse</button>
+            <span class="step-icon" aria-hidden="true">✉</span>
+            <h2>Vérifiez votre adresse e-mail.</h2>
+            <p class="card-intro">Un lien de vérification Firebase vient d’être envoyé à votre adresse e-mail.</p>
+            <form id="verify-form" class="auth-form">
+              <button class="button button-primary auth-submit" type="submit">J’ai vérifié mon adresse <span aria-hidden="true">→</span></button>
+            </form>
+            <button id="resend-code" class="text-button" type="button">Renvoyer le lien</button>
+            <p id="verify-error" class="form-message" role="status" aria-live="polite"></p>
+          </div>
+
+          <div id="profile-step" class="hidden">
+            <button id="profile-logout" class="back-button" type="button">← Retour</button>
+            <h2>Et vous, c’est qui ?</h2>
+            <p class="card-intro">Choisissez le nom et l’identifiant que vos amis verront.</p>
+            <form id="profile-form" class="auth-form">
+              <div class="field-pair">
+                <div><label for="profile-first-name">Prénom</label><input id="profile-first-name" name="firstName" autocomplete="given-name" maxlength="50" required></div>
+                <div><label for="profile-last-name">Nom</label><input id="profile-last-name" name="lastName" autocomplete="family-name" maxlength="50" required></div>
+              </div>
+              <label for="profile-username">Identifiant</label>
+              <div class="username-input"><span>@</span><input id="profile-username" name="username" minlength="3" maxlength="24" pattern="[a-zA-Z0-9_]{3,24}" placeholder="votreidentifiant" autocomplete="username" required></div>
+              <p class="field-hint">3 à 24 lettres, chiffres ou tirets bas. Vous pourrez le partager pour être retrouvé.</p>
+              <button class="button button-primary auth-submit" type="submit">C’est parti <span aria-hidden="true">→</span></button>
+            </form>
+            <p id="profile-error" class="form-message" role="status" aria-live="polite"></p>
+          </div>
+        </section>
+      </div>
+      <footer class="auth-footer"><span>Fait pour garder le lien.</span><span>Un espace privé, rien qu’à vous.</span></footer>
+    </main>
+
+    <div id="app-screen" class="app-screen hidden">
+      <aside id="sidebar" class="sidebar">
+        <div class="sidebar-head">
+          <a class="brand sidebar-brand" href="/" aria-label="Two, accueil"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M16 5.5c-6.1 0-11 4.1-11 9.2 0 2.7 1.4 5.1 3.6 6.8L7.5 26l5.8-1.7a12.8 12.8 0 0 0 3 .3c6.1 0 11-4.1 11-9.2S22.3 5.5 16 5.5Z"/><path d="M11.5 14.7h.01m4.5 0h.01m4.5 0h.01"/></svg></span><span>Two</span></a>
+          <button id="sidebar-toggle" class="icon-button sidebar-collapse" type="button" aria-label="Ranger la barre latérale" title="Ranger la barre latérale"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"/><path d="m9 9 3 3-3 3"/></svg></button>
+        </div>
+
+        <div class="search-wrap">
+          <label class="sr-only" for="friend-search">Chercher un ami par son identifiant</label>
+          <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4 4"/></svg>
+          <input id="friend-search" type="search" placeholder="Trouver un ami" autocomplete="off">
+          <span class="search-shortcut">⌕</span>
+          <div id="search-results" class="search-results hidden" role="status"></div>
+        </div>
+
+        <section class="sidebar-section request-section">
+          <div class="section-heading"><span>INVITATIONS</span><span id="invitation-count" class="count-pill hidden">0</span></div>
+          <div id="invitations-list" class="invitations-list"></div>
+        </section>
+        <section class="sidebar-section conversations-section">
+          <div class="section-heading"><span>MESSAGES</span><button id="new-message" class="section-action" type="button" aria-label="Chercher un ami">+</button></div>
+          <div id="conversations-list" class="conversations-list"></div>
+          <div id="empty-conversations" class="empty-sidebar">
+            <span class="empty-illustration" aria-hidden="true">♡</span>
+            <p>Les bonnes conversations commencent par un bonjour.</p>
+            <button id="find-friends" class="text-button" type="button">Trouver un ami <span aria-hidden="true">→</span></button>
+          </div>
+        </section>
+
+        <div class="profile-bar">
+          <div id="profile-avatar" class="avatar avatar-small">L</div>
+          <div class="profile-details"><strong id="profile-name">Mon compte</strong><span id="profile-handle">@membre</span></div>
+          <button id="logout-button" class="icon-button logout-button" type="button" title="Se déconnecter" aria-label="Se déconnecter"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7"/></svg></button>
+        </div>
+      </aside>
+
+      <main class="chat-area">
+        <header class="topbar"><button id="sidebar-reopen" class="icon-button sidebar-expand" type="button" aria-label="Afficher la barre latérale" title="Afficher la barre latérale"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"/><path d="m15 9-3 3 3 3"/></svg></button><button id="mobile-sidebar-toggle" class="icon-button mobile-menu" type="button" aria-label="Afficher les conversations"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"/></svg></button><span id="topbar-context" class="topbar-context">VOTRE ESPACE DE CONVERSATION</span><span class="topbar-private"><i></i> Messages partagés avec vos contacts</span></header>
+        <section id="chat-content" class="chat-content">
+          <div id="welcome-panel" class="welcome-panel">
+            <div class="welcome-orbit orbit-one"></div><div class="welcome-orbit orbit-two"></div>
+            <div class="welcome-symbol" aria-hidden="true">
+              <span class="symbol-bubble bubble-one">salut !</span><span class="symbol-bubble bubble-two">coucou :)</span>
+              <svg viewBox="0 0 112 112"><path d="M55.9 14c-23.1 0-41.8 15.5-41.8 34.6 0 10.1 5.3 19.2 13.8 25.5L23 92l21.5-6.3a48.8 48.8 0 0 0 11.4 1.3c23.1 0 41.8-15.5 41.8-34.6S79 14 55.9 14Z"/><path d="M39 49h.1M55 49h.1M71 49h.1"/></svg>
+            </div>
+            <span class="eyebrow welcome-eyebrow"><span class="eyebrow-dot"></span> TOUT EST EN PLACE</span>
+            <h1>Les conversations<br><em>commencent ici.</em></h1>
+            <p>Choisissez un ami dans la liste ou cherchez son identifiant pour lui dire bonjour.</p>
+            <button id="welcome-find-friend" class="button button-primary" type="button">Trouver un ami <span aria-hidden="true">→</span></button>
+            <div class="welcome-footer"><span>À votre rythme.</span><span>En toute simplicité.</span><span>Juste vous.</span></div>
+          </div>
+
+          <section id="conversation-panel" class="conversation-panel hidden">
+            <header class="conversation-header">
+              <div id="conversation-avatar" class="avatar">A</div>
+              <div class="conversation-person"><strong id="conversation-name">Ami</strong><span id="conversation-handle">@ami</span></div>
+              <span class="conversation-encryption"><i></i> En tête-à-tête</span>
+            </header>
+            <div id="message-list" class="message-list" role="log" aria-live="polite" aria-label="Messages de la conversation"></div>
+            <form id="message-form" class="composer">
+              <label class="sr-only" for="message-input">Votre message</label>
+              <textarea id="message-input" rows="1" maxlength="4000" placeholder="Écrivez un message…" required></textarea>
+              <div class="composer-bottom"><span>Entrée pour envoyer · Maj + Entrée pour aller à la ligne</span><button class="send-button" type="submit" aria-label="Envoyer le message" title="Envoyer le message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 3-7.2 18-3.9-7.9L2 9.2 21 3Z"/><path d="M21 3 9.9 13.1"/></svg></button></div>
+            </form>
+            <p id="message-error" class="message-error" role="status" aria-live="polite"></p>
+          </section>
+        </section>
+      </main>
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    </div>
+  </body>
+</html>
