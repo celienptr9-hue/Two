@@ -1,0 +1,908 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#F2F4FA">
+    <meta name="description" content="Two, la messagerie pour parler à deux, simplement.">
+    <title>Two, la messagerie à deux</title>
+    <link rel="icon" type="image/svg+xml" href="./icon.svg">
+    <link rel="manifest" href="./manifest.webmanifest">
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Two">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Instrument+Sans:wght@400..700&display=swap">
+    <script>
+      /* Thème appliqué avant l'affichage, pour éviter tout flash.
+         Priorité : choix enregistré, puis préférence du système. */
+      (function () {
+        var root = document.documentElement;
+        var stored = null;
+        try { stored = localStorage.getItem("two-theme"); } catch (e) {}
+        var theme = stored === "light" || stored === "dark"
+          ? stored
+          : (window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        function apply(t) {
+          root.setAttribute("data-theme", t);
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute("content", t === "dark" ? "#0A0D1E" : "#F2F4FA");
+          document.querySelectorAll("[data-theme-toggle]").forEach(function (b) {
+            b.setAttribute("aria-label", t === "dark" ? "Passer au thème clair" : "Passer au thème sombre");
+            b.setAttribute("title", t === "dark" ? "Thème clair" : "Thème sombre");
+          });
+        }
+        apply(theme);
+        document.addEventListener("DOMContentLoaded", function () { apply(theme); });
+        document.addEventListener("click", function (event) {
+          var button = event.target.closest && event.target.closest("[data-theme-toggle]");
+          if (!button) return;
+          theme = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+          try { localStorage.setItem("two-theme", theme); } catch (e) {}
+          apply(theme);
+        });
+        if (window.matchMedia) {
+          matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function (e) {
+            var saved = null;
+            try { saved = localStorage.getItem("two-theme"); } catch (err) {}
+            if (!saved) { theme = e.matches ? "dark" : "light"; apply(theme); }
+          });
+        }
+      })();
+    </script>
+    <style>
+/* ======================================================================
+   Two : identité « duo »
+   Orange = l'autre, bleu = vous. Le recouvrement des deux cercles
+   (la lentille) est l'endroit où la conversation a lieu.
+   ====================================================================== */
+
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #F2F4FA;
+  --bg-side: #EAEDF8;
+  --surface: #FFFFFF;
+  --surface-2: #F5F6FB;
+  --line: #DDE1F0;
+  --line-strong: #C8CEE4;
+  --ink: #0F1226;
+  --ink-2: #444866;
+  --ink-3: #666A89;
+  --blue: #2D3BFF;
+  --blue-hover: #2230E3;
+  --on-blue: #FFFFFF;
+  --blue-soft: #E3E6FF;
+  --blue-text: #1D29C7;
+  --orange: #FF7A1F;
+  --on-orange: #0F1226;
+  --orange-soft: #FFE7D4;
+  --orange-text: #9A3F05;
+  --lens: #0F1226;
+  --focus: #2D3BFF;
+  --bubble-me: #2D3BFF;
+  --bubble-me-ink: #FFFFFF;
+  --bubble-them: #FFE7D4;
+  --bubble-them-ink: #0F1226;
+  --art-them: #FFFFFF;
+  --art-me: #0F1226;
+  --art-me-ink: #FFFFFF;
+  --danger: #C42E22;
+  --ok: #14865A;
+  --dots: rgb(15 18 38 / 6%);
+  --shadow-card: 0 28px 70px -24px rgb(15 18 38 / 45%), 0 2px 8px rgb(15 18 38 / 10%);
+  --shadow-pop: 0 10px 28px -10px rgb(15 18 38 / 35%);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0A0D1E;
+  --bg-side: #0E1226;
+  --surface: #11152B;
+  --surface-2: #171C38;
+  --line: #232950;
+  --line-strong: #343C6C;
+  --ink: #EEF0FF;
+  --ink-2: #B4B8DA;
+  --ink-3: #8D92BB;
+  --blue: #4152FF;
+  --blue-hover: #5666FF;
+  --on-blue: #FFFFFF;
+  --blue-soft: #1C2260;
+  --blue-text: #B2BAFF;
+  --orange: #FF8A3D;
+  --on-orange: #0B0E1F;
+  --orange-soft: #3A2416;
+  --orange-text: #FFB27A;
+  --lens: #060817;
+  --focus: #8D9AFF;
+  --bubble-me: #4152FF;
+  --bubble-me-ink: #FFFFFF;
+  --bubble-them: #3A2416;
+  --bubble-them-ink: #FFE9D8;
+  --art-them: #FFFFFF;
+  --art-me: #0B0E1F;
+  --art-me-ink: #FFFFFF;
+  --danger: #FF8F85;
+  --ok: #5FD6A0;
+  --dots: rgb(255 255 255 / 4%);
+  --shadow-card: 0 30px 80px -24px rgb(0 0 0 / 70%), 0 2px 8px rgb(0 0 0 / 40%);
+  --shadow-pop: 0 12px 30px -10px rgb(0 0 0 / 60%);
+}
+
+:root {
+  --font-ui: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Bricolage Grotesque", "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.5;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ---------- Base ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+html { background: var(--bg); -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  transition: background .25s ease, color .25s ease;
+}
+body:has(#app-screen:not(.hidden)) { overflow: hidden; overscroll-behavior: none; }
+h1, h2, h3, p { margin: 0; }
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+a { color: inherit; }
+::selection { background: var(--blue); color: #fff; }
+.hidden { display: none !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+* { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+
+.icon { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------- Marque ---------- */
+.brand { display: inline-flex; width: fit-content; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; }
+.logo { width: 38px; height: 24px; flex: none; }
+.lg-a { fill: var(--orange); }
+.lg-b { fill: var(--blue); }
+.lg-lens { fill: var(--ink); }
+.wordmark { font: 800 27px/1 var(--font-display); letter-spacing: -.045em; }
+
+/* ---------- Boutons ---------- */
+.button {
+  display: inline-flex;
+  min-height: 50px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 999px;
+  font: 600 15px/1 var(--font-ui);
+  text-decoration: none;
+  transition: background .15s, box-shadow .15s, transform .12s;
+}
+.button:active { transform: translateY(1px) scale(.99); }
+.button-primary { background: var(--blue); color: var(--on-blue); box-shadow: 0 8px 20px -8px color-mix(in srgb, var(--blue) 75%, transparent); }
+.button-primary:hover { background: var(--blue-hover); }
+.button-primary:disabled { cursor: wait; opacity: .75; }
+.button-secondary { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--line-strong); }
+.button-secondary:hover { background: var(--surface-2); box-shadow: inset 0 0 0 1.5px var(--ink-3); }
+.spinner { width: 18px; height: 18px; border: 2.5px solid rgb(255 255 255 / 35%); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.icon-button {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  place-items: center;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink-2);
+  transition: background .15s, color .15s;
+}
+.icon-button:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
+
+.theme-toggle .icon-sun { display: none; }
+:root[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+:root[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+
+.text-button { padding: 8px 0; border: 0; background: none; color: var(--blue-text); font: 600 14px/1.2 var(--font-ui); }
+.text-button:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* ---------- Avatars : orange pour les autres, bleu pour vous ---------- */
+.avatar {
+  --av-bg: #FF7A1F;
+  --av-ink: #0F1226;
+  position: relative;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--av-bg);
+  color: var(--av-ink);
+  font: 700 15px/1 var(--font-display);
+  user-select: none;
+}
+.avatar[data-tone="1"] { --av-bg: #FFB26B; }
+.avatar[data-tone="2"] { --av-bg: #FF6B63; }
+.avatar[data-tone="3"] { --av-bg: #FFC640; }
+.avatar[data-tone="4"] { --av-bg: #FF935C; }
+.avatar[data-tone="5"] { --av-bg: #F2C9A0; }
+.avatar.is-me { --av-bg: var(--blue); --av-ink: #fff; }
+.avatar-small { width: 36px; height: 36px; font-size: 13px; }
+
+/* ======================================================================
+   Écran de connexion
+   Mobile d'abord : un bandeau « duo » puis le formulaire.
+   ====================================================================== */
+.auth-screen {
+  position: relative;
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+  flex-direction: column;
+  isolation: isolate;
+  padding: 236px 0 32px;
+}
+
+/* Les deux cercles et leur lentille */
+.duo {
+  position: absolute;
+  z-index: -1;
+  inset: 0 0 auto 0;
+  height: 210px;
+  overflow: hidden;
+  pointer-events: none;
+  --D: 224px;
+  --ow: 130px;
+  --s: calc((var(--D) - var(--ow)) / 2);
+}
+.duo i { position: absolute; top: calc(50% - var(--D) / 2); width: var(--D); height: var(--D); border-radius: 50%; }
+.duo-a { left: calc(50% - var(--s) - var(--D) / 2); background: var(--orange); }
+.duo-b { left: calc(50% + var(--s) - var(--D) / 2); background: var(--blue); }
+.duo-lens {
+  left: calc(50% - var(--s) - var(--D) / 2);
+  background: var(--lens);
+  clip-path: circle(calc(var(--D) / 2) at calc(var(--D) / 2 + 2 * var(--s)) 50%);
+}
+
+.auth-top { position: absolute; top: 0; right: 0; left: 0; display: grid; height: 210px; place-items: center; }
+.auth-top .brand { color: #fff; }
+.auth-top .logo { display: none; }
+.auth-top .wordmark { font-size: 38px; }
+.auth-theme { position: absolute; top: 12px; right: 12px; }
+
+.auth-stage { display: flex; width: 100%; max-width: 480px; flex-direction: column; gap: 24px; margin: 0 auto; padding: 0 20px; }
+
+/* Le titre est un dialogue : l'autre parle en orange, vous répondez en bleu. */
+.auth-headline { display: flex; flex-direction: column; gap: 8px; font: 800 clamp(30px, 9vw, 40px)/1 var(--font-display); letter-spacing: -.035em; }
+.say { display: block; width: fit-content; padding: .16em .55em .22em; border-radius: .9em; text-wrap: balance; }
+.say-a { background: var(--orange); color: var(--on-orange); border-bottom-left-radius: .22em; }
+.say-b { margin-left: auto; background: var(--blue); color: var(--on-blue); border-bottom-right-radius: .22em; }
+
+.auth-card { width: 100%; }
+.auth-card h2 { margin-bottom: 8px; font: 700 28px/1.1 var(--font-display); letter-spacing: -.03em; }
+.card-intro { max-width: 40ch; margin-bottom: 22px; color: var(--ink-2); }
+.auth-form { display: flex; flex-direction: column; }
+.auth-form > label, .field-pair label { margin-bottom: 7px; color: var(--ink-2); font-size: 13px; font-weight: 600; }
+.auth-form input {
+  width: 100%;
+  height: 50px;
+  margin-bottom: 16px;
+  padding: 0 16px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 14px;
+  outline: none;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 16px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.auth-form input::placeholder { color: var(--ink-3); }
+.auth-form input:focus { border-color: var(--blue); box-shadow: 0 0 0 4px color-mix(in srgb, var(--blue) 18%, transparent); }
+.password-field { position: relative; margin-bottom: 16px; }
+.auth-form .password-field input { margin-bottom: 0; padding-right: 92px; }
+.password-toggle { position: absolute; top: 50%; right: 8px; padding: 7px 10px; transform: translateY(-50%); border: 0; border-radius: 8px; background: transparent; color: var(--ink-2); font-size: 13px; font-weight: 600; }
+.password-toggle:hover { background: var(--surface-2); color: var(--ink); }
+.auth-submit { width: 100%; margin-top: 4px; }
+.auth-divider { display: flex; align-items: center; gap: 14px; margin: 18px 0; color: var(--ink-3); font-size: 13px; }
+.auth-divider::before, .auth-divider::after { height: 1px; flex: 1; background: var(--line); content: ""; }
+.auth-switch { width: 100%; }
+.form-message { min-height: 0; margin-top: 12px; color: var(--danger); font-size: 14px; line-height: 1.45; }
+.form-message:empty { display: none; }
+.small-legal { margin-top: 16px; color: var(--ink-3); font-size: 13px; text-align: center; }
+.back-button { display: inline-flex; align-items: center; gap: 6px; margin: -6px 0 16px -4px; padding: 6px 8px 6px 4px; border: 0; border-radius: 8px; background: none; color: var(--ink-2); font-size: 14px; font-weight: 600; }
+.back-button:hover { background: var(--surface-2); color: var(--ink); }
+.back-button .icon { width: 18px; height: 18px; }
+.step-icon { display: grid; width: 52px; height: 52px; margin-bottom: 18px; place-items: center; border-radius: 16px; background: var(--blue-soft); color: var(--blue-text); }
+.field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.field-pair > div { display: flex; flex-direction: column; }
+.username-input { position: relative; }
+.username-input > span { position: absolute; top: 14px; left: 16px; color: var(--ink-3); font-size: 16px; }
+.auth-form .username-input input { padding-left: 34px; }
+.field-hint { margin: -6px 0 18px; color: var(--ink-3); font-size: 13px; line-height: 1.45; }
+
+/* Ordinateur : le formulaire se tient dans la lentille, les deux phrases de part et d'autre. */
+@media (min-width: 1000px) {
+  .auth-screen { display: grid; grid-template-rows: auto 1fr; padding: 24px clamp(20px, 4vw, 56px); }
+  .duo { inset: 0; height: auto; --D: min(106vh, 76vw); --ow: 520px; }
+  .auth-top { position: static; display: flex; height: auto; align-items: center; justify-content: space-between; }
+  .auth-top .brand { color: var(--ink); }
+  .auth-top .logo { display: block; }
+  .auth-top .wordmark { font-size: 28px; }
+  .auth-theme { position: static; }
+  .auth-stage {
+    display: grid;
+    max-width: none;
+    align-self: center;
+    grid-template-columns: minmax(0, 1fr) minmax(380px, 440px) minmax(0, 1fr);
+    column-gap: clamp(32px, 5vw, 80px);
+    align-items: center;
+    margin: 0;
+    padding: 0;
+  }
+  .auth-headline { display: contents; font-size: clamp(40px, 4.7vw, 68px); line-height: .98; }
+  .say { padding: 0; border-radius: 0; background: none; }
+  .say-a { grid-column: 1; grid-row: 1; justify-self: end; color: var(--on-orange); text-align: right; }
+  .say-b { grid-column: 3; grid-row: 1; justify-self: start; margin-left: 0; color: var(--on-blue); }
+  .auth-card { grid-column: 2; grid-row: 1; padding: 36px 32px 28px; border-radius: 28px; background: var(--surface); box-shadow: var(--shadow-card); }
+}
+
+/* ======================================================================
+   Application
+   ====================================================================== */
+.app-screen { display: flex; width: 100%; height: var(--app-height, 100dvh); min-height: 0; overflow: hidden; background: var(--surface); }
+
+.sidebar {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  width: 336px;
+  flex: none;
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+  background: var(--bg-side);
+  transition: width .24s ease, border-color .24s ease, background .25s;
+}
+.sidebar.collapsed { width: 0; overflow: hidden; border-right-color: transparent; }
+.sidebar-head { display: flex; height: 72px; flex: none; align-items: center; justify-content: space-between; padding: 0 12px 0 20px; }
+.sidebar-head .logo { width: 34px; height: 22px; }
+.sidebar-head .wordmark { font-size: 25px; }
+
+.ic-mobile { display: none; }
+
+.search-wrap { position: relative; margin: 0 16px 16px; }
+.search-icon { position: absolute; top: 12px; left: 14px; width: 18px; height: 18px; color: var(--ink-3); pointer-events: none; }
+.search-wrap input {
+  width: 100%;
+  height: 44px;
+  padding: 0 14px 0 42px;
+  border: 1.5px solid transparent;
+  border-radius: 999px;
+  outline: none;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--ink);
+  font-size: 14px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.search-wrap input::placeholder { color: var(--ink-3); }
+.search-wrap input:focus { border-color: var(--blue); box-shadow: 0 0 0 4px color-mix(in srgb, var(--blue) 16%, transparent); }
+.search-results { max-height: 46vh; margin-top: 8px; overflow-y: auto; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); }
+.search-result { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
+.search-result + .search-result { border-top: 1px solid var(--line); }
+.search-result-info { min-width: 0; flex: 1; }
+.search-result-info strong, .search-result-info span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-result-info strong { font-size: 14px; font-weight: 600; }
+.search-result-info span { color: var(--ink-3); font-size: 13px; }
+.mini-action { min-height: 34px; padding: 0 15px; border: 0; border-radius: 999px; background: var(--blue); color: var(--on-blue); font-size: 13px; font-weight: 600; white-space: nowrap; transition: background .15s; }
+.mini-action:hover { background: var(--blue-hover); }
+.mini-action:disabled { opacity: .6; }
+.search-note { padding: 14px; color: var(--ink-2); font-size: 14px; line-height: 1.5; }
+.search-status { color: var(--ink-3); font-size: 13px; white-space: nowrap; }
+
+.sidebar-section { flex: none; padding: 0 12px; }
+.section-heading { display: flex; height: 36px; align-items: center; justify-content: space-between; padding: 0 8px; color: var(--ink-2); font-size: 13px; font-weight: 600; }
+.count-pill { display: grid; min-width: 22px; height: 22px; padding: 0 7px; place-items: center; border-radius: 99px; background: var(--orange); color: var(--on-orange); font-size: 12px; font-weight: 700; }
+.section-action { display: grid; width: 30px; height: 30px; place-items: center; border: 0; border-radius: 50%; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--line-strong); color: var(--ink); transition: background .15s, color .15s; }
+.section-action:hover { background: var(--blue); box-shadow: none; color: #fff; }
+.section-action .icon { width: 16px; height: 16px; stroke-width: 2.2; }
+
+.invitations-list { display: flex; flex-direction: column; gap: 8px; padding: 2px 0 14px; }
+.invitation-card { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 10px 10px; padding: 12px; border-radius: 18px; background: var(--orange-soft); color: var(--bubble-them-ink); }
+.invitation-person { min-width: 0; flex: 1; }
+.invitation-person strong, .invitation-person span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.invitation-person strong { font-size: 14px; font-weight: 600; }
+.invitation-person span { color: var(--orange-text); font-size: 13px; }
+.invitation-actions { grid-column: 1 / -1; display: flex; gap: 6px; }
+.invitation-actions button { flex: 1; }
+.invitation-actions button { padding: 8px 14px; border: 0; border-radius: 999px; background: var(--blue); color: var(--on-blue); font-size: 13px; font-weight: 600; transition: background .15s; }
+.invitation-actions button:hover { background: var(--blue-hover); }
+.invitation-actions .decline-action { background: transparent; color: var(--bubble-them-ink); }
+.invitation-actions .decline-action:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+
+.conversations-section { min-height: 0; flex: 1; overflow-y: auto; }
+.conversations-list { display: flex; flex-direction: column; gap: 2px; padding-bottom: 8px; }
+.conversation-item { display: flex; width: 100%; min-height: 68px; align-items: center; gap: 12px; padding: 10px 12px; border: 0; border-radius: 18px; background: transparent; text-align: left; transition: background .15s; }
+.conversation-item:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.conversation-item.active { background: var(--surface); box-shadow: 0 1px 2px rgb(15 18 38 / 8%), inset 0 0 0 1px var(--line); }
+.conversation-preview { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 2px; }
+.conversation-preview-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.conversation-preview-top strong { overflow: hidden; min-width: 0; flex: 1; font-size: 15px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.conversation-preview-top time { flex: none; color: var(--ink-3); font-size: 12px; }
+.conversation-last { overflow: hidden; color: var(--ink-3); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.conversation-item.unread .conversation-preview-top strong { font-weight: 700; }
+.conversation-item.unread .conversation-last { color: var(--ink); font-weight: 500; }
+.conversation-item.unread .conversation-preview-top time { color: var(--orange-text); font-weight: 600; }
+.unread-dot { width: 10px; height: 10px; flex: none; border-radius: 50%; background: var(--orange); box-shadow: 0 0 0 4px color-mix(in srgb, var(--orange) 25%, transparent); }
+
+.empty-sidebar { display: flex; flex-direction: column; align-items: flex-start; padding: 18px 10px; }
+.empty-art { position: relative; width: 64px; height: 36px; margin-bottom: 14px; }
+.empty-art i { position: absolute; top: 0; width: 36px; height: 36px; border-radius: 50%; }
+.empty-art i:first-child { left: 0; background: var(--orange); }
+.empty-art i:last-child { left: 26px; background: var(--blue); }
+.empty-sidebar p { max-width: 230px; margin-bottom: 4px; color: var(--ink-2); font-size: 14px; line-height: 1.5; }
+
+.profile-bar { display: flex; min-height: 72px; flex: none; align-items: center; gap: 4px; padding: 12px 12px 12px 18px; border-top: 1px solid var(--line); }
+.profile-bar .avatar { margin-right: 8px; }
+.profile-details { min-width: 0; flex: 1; }
+.profile-details strong, .profile-details span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-details strong { font-size: 14px; font-weight: 600; }
+.profile-details span { color: var(--ink-3); font-size: 13px; }
+
+/* ---------- Zone de conversation ---------- */
+.chat-area { position: relative; display: flex; min-width: 0; flex: 1; flex-direction: column; background: var(--surface); transition: background .25s; }
+.chat-content { display: flex; min-height: 0; flex: 1; flex-direction: column; }
+.open-sidebar { display: none; }
+.sidebar.collapsed ~ .chat-area .open-sidebar { display: grid; }
+
+/* Accueil sans conversation */
+.welcome-panel { position: relative; display: flex; width: 100%; flex: 1; flex-direction: column; align-items: center; justify-content: center; padding: 40px 24px 56px; text-align: center; }
+.panel-tools { position: absolute; top: 16px; right: 16px; left: 16px; display: flex; justify-content: space-between; }
+.panel-tools .theme-toggle { margin-left: auto; }
+.welcome-art { position: relative; width: 300px; height: 190px; margin-bottom: 28px; --D: 156px; --s: 42px; }
+.welcome-art i { position: absolute; top: 14px; width: var(--D); height: var(--D); border-radius: 50%; }
+.wa-a { left: calc(50% - var(--s) - var(--D) / 2); background: var(--orange); }
+.wa-b { left: calc(50% + var(--s) - var(--D) / 2); background: var(--blue); }
+.wa-lens {
+  left: calc(50% - var(--s) - var(--D) / 2);
+  background: var(--lens);
+  clip-path: circle(calc(var(--D) / 2) at calc(var(--D) / 2 + 2 * var(--s)) 50%);
+}
+.wa-bubble { position: absolute; padding: 9px 15px; border-radius: 18px; box-shadow: var(--shadow-pop); font: 600 14px/1.2 var(--font-ui); }
+.wa-them { top: 0; left: 0; border-bottom-left-radius: 5px; background: var(--art-them); color: #0F1226; }
+.wa-me { right: 0; bottom: 4px; border-bottom-right-radius: 5px; background: var(--art-me); color: var(--art-me-ink); }
+.welcome-panel h1 { max-width: 14ch; margin-bottom: 12px; font: 800 clamp(32px, 4vw, 44px)/1.02 var(--font-display); letter-spacing: -.035em; text-wrap: balance; }
+.welcome-panel p { max-width: 38ch; margin-bottom: 26px; color: var(--ink-2); font-size: 16px; line-height: 1.55; text-wrap: pretty; }
+
+/* Conversation ouverte */
+.conversation-panel { display: flex; width: 100%; min-height: 0; flex: 1; flex-direction: column; }
+.conversation-header { display: flex; height: 72px; flex: none; align-items: center; gap: 14px; padding: 0 20px; border-bottom: 1px solid var(--line); }
+.conversation-header .theme-toggle { margin-left: auto; }
+.conversation-person { display: flex; min-width: 0; flex-direction: column; gap: 1px; }
+.conversation-person strong { overflow: hidden; font: 700 18px/1.2 var(--font-display); letter-spacing: -.02em; text-overflow: ellipsis; white-space: nowrap; }
+.conversation-person span { color: var(--ink-3); font-size: 13px; }
+
+.message-list {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  padding: 24px max(24px, calc((100% - 860px) / 2));
+  overflow-y: auto;
+  background-image: radial-gradient(circle, var(--dots) 1.2px, transparent 1.4px);
+  background-size: 22px 22px;
+}
+.message-day { align-self: center; margin: 20px 0 10px; padding: 4px 13px; border-radius: 999px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); color: var(--ink-3); font-size: 12px; font-weight: 600; }
+.message-day:first-child { margin-top: 0; }
+.message-row { display: flex; max-width: min(70%, 540px); flex-direction: column; align-items: flex-start; gap: 3px; margin-top: 3px; }
+.message-row.group-start { margin-top: 12px; }
+.message-row.own { align-self: flex-end; align-items: flex-end; }
+.message-bubble {
+  padding: 10px 15px;
+  border-radius: 22px 22px 22px 6px;
+  background: var(--bubble-them);
+  color: var(--bubble-them-ink);
+  font-size: 15px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.message-row:not(.group-start) .message-bubble { border-top-left-radius: 6px; }
+.message-row.own .message-bubble { border-radius: 22px 22px 6px 22px; background: var(--bubble-me); color: var(--bubble-me-ink); }
+.message-row.own:not(.group-start) .message-bubble { border-top-right-radius: 6px; }
+.message-time { padding: 0 6px; color: var(--ink-3); font-size: 12px; }
+.message-row.is-new { transform-origin: 0 100%; animation: pop .3s cubic-bezier(.2, .9, .3, 1.15) both; }
+.message-row.own.is-new { transform-origin: 100% 100%; }
+@keyframes pop { from { opacity: 0; transform: translateY(8px) scale(.94); } }
+.conversation-empty { align-self: center; margin: auto; max-width: 28ch; color: var(--ink-2); text-align: center; }
+
+.composer-zone { flex: none; padding: 12px max(24px, calc((100% - 860px) / 2)) 16px; background: var(--surface); }
+.composer { display: flex; align-items: flex-end; gap: 8px; padding: 6px 6px 6px 20px; border: 1.5px solid var(--line); border-radius: 28px; background: var(--surface-2); transition: border-color .15s, box-shadow .15s, background .15s; }
+.composer:focus-within { border-color: var(--blue); background: var(--surface); box-shadow: 0 0 0 4px color-mix(in srgb, var(--blue) 14%, transparent); }
+.composer textarea { display: block; min-width: 0; max-height: 160px; min-height: 28px; flex: 1; resize: none; padding: 10px 0; border: 0; outline: none; background: transparent; color: var(--ink); font-size: 15px; line-height: 1.45; }
+.composer textarea::placeholder { color: var(--ink-3); }
+.send-button { display: grid; width: 42px; height: 42px; flex: none; place-items: center; border: 0; border-radius: 50%; background: var(--blue); color: var(--on-blue); transition: background .15s, transform .12s, opacity .15s; }
+.send-button:hover { background: var(--blue-hover); }
+.send-button:active { transform: scale(.94); }
+.send-button:disabled { cursor: wait; opacity: .6; }
+.send-button .icon { stroke-width: 2.2; }
+.composer-hint { margin-top: 8px; color: var(--ink-3); font-size: 12px; text-align: center; }
+.message-error { margin-top: 8px; color: var(--danger); font-size: 13px; text-align: center; }
+.message-error:empty { display: none; }
+
+.toast {
+  position: fixed;
+  z-index: 40;
+  bottom: 28px;
+  left: 50%;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 13px 20px;
+  transform: translate(-50%, 12px);
+  border-radius: 999px;
+  background: var(--ink);
+  box-shadow: var(--shadow-pop);
+  color: var(--bg);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s, transform .2s;
+}
+.toast.visible { transform: translate(-50%, 0); opacity: 1; }
+
+.sidebar-backdrop { display: none; }
+
+/* ======================================================================
+   Mobile : barre latérale en tiroir
+   ====================================================================== */
+@media (max-width: 760px) {
+  .ic-desktop { display: none; }
+  .ic-mobile { display: block; }
+
+  .sidebar-backdrop {
+    position: fixed;
+    z-index: 19;
+    inset: 0;
+    display: block;
+    background: rgb(8 10 26 / 55%);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .24s ease;
+  }
+  .app-screen.drawer-open .sidebar-backdrop { opacity: 1; pointer-events: auto; }
+  .sidebar {
+    position: fixed;
+    z-index: 20;
+    top: 0;
+    left: 0;
+    width: min(348px, 90vw);
+    height: var(--app-height, 100dvh);
+    border-right: 0;
+    border-radius: 0 28px 28px 0;
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition: transform .26s cubic-bezier(.2, .8, .2, 1), visibility 0s linear .26s;
+  }
+  .sidebar.collapsed { width: min(348px, 90vw); overflow: visible; border-right: 0; }
+  .app-screen.drawer-open .sidebar { transform: translateX(0); visibility: visible; box-shadow: 24px 0 60px rgb(0 0 0 / 30%); transition: transform .26s cubic-bezier(.2, .8, .2, 1); }
+  .sidebar-head { height: 64px; }
+  .icon-button { width: 42px; height: 42px; }
+  .search-wrap { margin-bottom: 14px; }
+  .search-wrap input { height: 46px; font-size: 16px; }
+  .search-icon { top: 14px; }
+  .mini-action { min-height: 36px; padding: 0 16px; }
+  .invitation-actions button { padding: 9px 14px; }
+
+  .open-sidebar { display: grid; }
+  .sidebar.collapsed ~ .chat-area .open-sidebar { display: grid; }
+  .panel-tools { top: 12px; right: 12px; left: 12px; }
+  .welcome-panel { padding: 72px 20px 40px; }
+  .welcome-art { width: 280px; height: 176px; --D: 144px; --s: 38px; }
+
+  .conversation-header { height: 64px; gap: 10px; padding: 0 10px 0 8px; }
+  .conversation-person strong { font-size: 17px; }
+  .message-list { padding: 16px 12px; }
+  .message-row { max-width: 84%; }
+  .composer-zone { padding: 8px 10px 10px; }
+  .composer-hint { display: none; }
+  .composer textarea { font-size: 16px; }
+  .toast { bottom: 18px; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Le seul moment orchestré : les deux cercles se rejoignent, la lentille s'allume. */
+  .duo-a { animation: duo-a 1s cubic-bezier(.2, .8, .2, 1) both; }
+  .duo-b { animation: duo-b 1s cubic-bezier(.2, .8, .2, 1) both; }
+  .duo-lens { animation: lens-in .5s .75s ease-out both; }
+  .auth-card, .auth-headline .say { animation: rise .7s .4s cubic-bezier(.2, .8, .2, 1) both; }
+  .auth-top { animation: lens-in .6s .8s ease-out both; }
+}
+@keyframes duo-a { from { transform: translateX(-16%); } }
+@keyframes duo-b { from { transform: translateX(16%); } }
+@keyframes lens-in { from { opacity: 0; } }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+
+@media (max-width: 360px) {
+  .field-pair { grid-template-columns: 1fr; }
+}
+
+/* ---- Statut des conversations ---- */
+.conversation-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink-3); }
+.conversation-status.is-opened { color: color-mix(in srgb, var(--blue) 72%, var(--ink)); }
+.conversation-status.is-new { color: var(--orange-text); }
+.conversation-status.is-new::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 8px 1px var(--orange); }
+@media (prefers-reduced-motion: no-preference) {
+  .conversation-status.is-new { animation: glow 1.8s ease-in-out infinite; }
+  .conversation-status.is-new::before { animation: glow-dot 1.8s ease-in-out infinite; }
+}
+@keyframes glow { 0%, 100% { text-shadow: 0 0 0 transparent; } 50% { text-shadow: 0 0 12px color-mix(in srgb, var(--orange) 80%, transparent); } }
+@keyframes glow-dot { 0%, 100% { box-shadow: 0 0 3px 0 var(--orange); } 50% { box-shadow: 0 0 12px 4px var(--orange); } }
+
+/* ---- Notifications ---- */
+#notif-button[aria-pressed="true"] { color: var(--orange-text); background: color-mix(in srgb, var(--orange) 16%, transparent); }
+
+/* ---- Messages : suppression et photos ---- */
+.message-line { display: flex; max-width: 100%; align-items: center; gap: 6px; }
+.message-row.own .message-line { flex-direction: row; justify-content: flex-end; }
+.message-delete { display: inline-flex; flex: none; align-items: center; gap: 6px; height: 32px; min-width: 32px; justify-content: center; padding: 0 8px; border: 0; border-radius: 999px; background: transparent; color: var(--ink-3); font-size: 12px; font-weight: 600; opacity: 0; transition: opacity .15s, background .15s, color .15s; }
+.message-delete .icon { width: 16px; height: 16px; }
+.message-delete .label { display: none; }
+.message-row:hover .message-delete, .message-row:focus-within .message-delete, .message-row.show-actions .message-delete { opacity: 1; }
+.message-delete:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
+.message-delete.confirming { opacity: 1; background: #D92D20; color: #fff; }
+.message-delete.confirming .label { display: inline; }
+.message-bubble.has-image { padding: 4px; }
+.message-image { display: block; max-width: min(340px, 62vw); max-height: 340px; border-radius: 18px; cursor: zoom-in; background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.message-caption { padding: 7px 11px 5px; white-space: pre-wrap; }
+.attach-button { margin-bottom: 0; }
+.composer { padding-left: 6px; }
+.composer textarea { padding-left: 4px; }
+.image-preview { position: relative; display: inline-block; margin: 0 0 10px 6px; }
+.image-preview img { display: block; max-width: 120px; max-height: 120px; border-radius: 16px; box-shadow: 0 0 0 1.5px var(--line); }
+.image-remove { position: absolute; top: -8px; right: -8px; display: grid; width: 26px; height: 26px; place-items: center; border: 0; border-radius: 50%; background: var(--ink); color: var(--bg); }
+.image-remove .icon { width: 14px; height: 14px; }
+.lightbox { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 16px; background: rgb(6 8 23 / 88%); cursor: zoom-out; }
+.lightbox img { max-width: 94vw; max-height: 90vh; border-radius: 12px; }
+@media (max-width: 760px) {
+  .message-delete { opacity: 0; }
+  .message-row.show-actions .message-delete { opacity: 1; }
+}
+
+    </style>
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+      <defs>
+        <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></symbol>
+        <symbol id="i-send" viewBox="0 0 24 24"><path d="M12 19V5"/><path d="m5.5 11.5 6.5-6.5 6.5 6.5"/></symbol>
+        <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+        <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+        <symbol id="i-back" viewBox="0 0 24 24"><path d="m14.5 5.5-6.5 6.5 6.5 6.5"/></symbol>
+        <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="3.5"/><path d="M9.5 4.5v15"/></symbol>
+        <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></symbol>
+        <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2.5 12h2M19.5 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+        <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="m21 16-5-5-8 8"/></symbol>
+        <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></symbol>
+        <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7"/><path d="M10 20a2 2 0 0 0 4 0"/></symbol>
+        <symbol id="i-logout" viewBox="0 0 24 24"><path d="M10 17l5-5-5-5M15 12H4"/><path d="M13 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5"/></symbol>
+        <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+        <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="13" rx="3"/><path d="m4.5 8 7.5 5.5L19.5 8"/></symbol>
+      </defs>
+    </svg>
+
+    <main id="auth-screen" class="auth-screen">
+      <div class="duo" aria-hidden="true"><i class="duo-a"></i><i class="duo-b"></i><i class="duo-lens"></i></div>
+
+      <header class="auth-top">
+        <a class="brand" href="./" aria-label="Two, accueil">
+          <svg class="logo" viewBox="0 0 44 28" aria-hidden="true"><circle class="lg-a" cx="14" cy="14" r="13"/><circle class="lg-b" cx="30" cy="14" r="13"/><path class="lg-lens" d="M22 3.753A13 13 0 0 1 22 24.247A13 13 0 0 1 22 3.753Z"/></svg>
+          <span class="wordmark">two</span>
+        </a>
+        <button class="icon-button theme-toggle auth-theme" type="button" data-theme-toggle aria-label="Passer au thème sombre" title="Thème sombre">
+          <svg class="icon icon-moon" aria-hidden="true"><use href="#i-moon"/></svg>
+          <svg class="icon icon-sun" aria-hidden="true"><use href="#i-sun"/></svg>
+        </button>
+      </header>
+
+      <div class="auth-stage">
+        <h1 class="auth-headline"><span class="say say-a">Un petit mot</span><span class="say say-b">change tout.</span></h1>
+
+        <section class="auth-card">
+          <div id="auth-step" class="hidden">
+            <h2>Bon retour</h2>
+            <p class="card-intro">Connectez-vous pour retrouver vos conversations.</p>
+            <form id="login-form" class="auth-form">
+              <label for="login-email">Adresse e-mail</label>
+              <input id="login-email" name="email" type="email" placeholder="vous@exemple.fr" autocomplete="email" required>
+              <label for="login-password">Mot de passe</label>
+              <div class="password-field">
+                <input id="login-password" name="password" type="password" placeholder="Votre mot de passe" autocomplete="current-password" required>
+                <button class="password-toggle" type="button" data-password-toggle aria-controls="login-password" aria-label="Afficher le mot de passe" aria-pressed="false">Afficher</button>
+              </div>
+              <button class="button button-primary auth-submit" type="submit">Se connecter</button>
+            </form>
+            <p id="auth-error" class="form-message" role="status" aria-live="polite"></p>
+            <div class="auth-divider"><span>ou</span></div>
+            <button id="switch-signup" class="button button-secondary auth-switch" type="button">Créer un compte</button>
+          </div>
+
+          <div id="signup-step">
+            <h2>Créez votre compte</h2>
+            <p class="card-intro">Retrouvez les gens qui comptent. Sans bruit, sans détour : juste vous et eux.</p>
+            <form id="signup-form" class="auth-form">
+              <label for="signup-email">Adresse e-mail</label>
+              <input id="signup-email" name="email" type="email" placeholder="vous@exemple.fr" autocomplete="email" required>
+              <label for="signup-password">Mot de passe</label>
+              <div class="password-field">
+                <input id="signup-password" name="password" type="password" placeholder="10 caractères minimum" autocomplete="new-password" minlength="10" required>
+                <button class="password-toggle" type="button" data-password-toggle aria-controls="signup-password" aria-label="Afficher le mot de passe" aria-pressed="false">Afficher</button>
+              </div>
+              <button class="button button-primary auth-submit" type="submit">Créer mon compte</button>
+            </form>
+            <p id="signup-error" class="form-message" role="status" aria-live="polite"></p>
+            <div class="auth-divider"><span>ou</span></div>
+            <button id="switch-login" class="button button-secondary auth-switch" type="button">J’ai déjà un compte</button>
+            <p class="small-legal">Votre adresse e-mail n’est visible que par vous.</p>
+          </div>
+
+          <div id="verify-step" class="hidden">
+            <button id="verification-logout" class="back-button" type="button"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg>Utiliser une autre adresse</button>
+            <span class="step-icon" aria-hidden="true"><svg class="icon"><use href="#i-mail"/></svg></span>
+            <h2>Vérifiez votre adresse e-mail</h2>
+            <p class="card-intro">Un lien de vérification vient d’être envoyé à votre adresse e-mail.</p>
+            <form id="verify-form" class="auth-form">
+              <button class="button button-primary auth-submit" type="submit">J’ai vérifié mon adresse</button>
+            </form>
+            <button id="resend-code" class="text-button" type="button">Renvoyer le lien</button>
+            <p id="verify-error" class="form-message" role="status" aria-live="polite"></p>
+          </div>
+
+          <div id="profile-step" class="hidden">
+            <button id="profile-logout" class="back-button" type="button"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg>Retour</button>
+            <h2>Comment vous appelle-t-on ?</h2>
+            <p class="card-intro">Choisissez le nom et l’identifiant que vos amis verront.</p>
+            <form id="profile-form" class="auth-form">
+              <div class="field-pair">
+                <div><label for="profile-first-name">Prénom</label><input id="profile-first-name" name="firstName" autocomplete="given-name" maxlength="50" required></div>
+                <div><label for="profile-last-name">Nom</label><input id="profile-last-name" name="lastName" autocomplete="family-name" maxlength="50" required></div>
+              </div>
+              <label for="profile-username">Identifiant</label>
+              <div class="username-input"><span>@</span><input id="profile-username" name="username" minlength="3" maxlength="24" pattern="[a-zA-Z0-9_]{3,24}" placeholder="votreidentifiant" autocomplete="username" autocapitalize="none" required></div>
+              <p class="field-hint">3 à 24 lettres, chiffres ou tirets bas. Vos amis vous retrouvent avec cet identifiant.</p>
+              <button class="button button-primary auth-submit" type="submit">Commencer</button>
+            </form>
+            <p id="profile-error" class="form-message" role="status" aria-live="polite"></p>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <div id="app-screen" class="app-screen hidden">
+      <div id="sidebar-backdrop" class="sidebar-backdrop" aria-hidden="true"></div>
+
+      <aside id="sidebar" class="sidebar">
+        <div class="sidebar-head">
+          <a class="brand" href="./" aria-label="Two, accueil">
+            <svg class="logo" viewBox="0 0 44 28" aria-hidden="true"><circle class="lg-a" cx="14" cy="14" r="13"/><circle class="lg-b" cx="30" cy="14" r="13"/><path class="lg-lens" d="M22 3.753A13 13 0 0 1 22 24.247A13 13 0 0 1 22 3.753Z"/></svg>
+            <span class="wordmark">two</span>
+          </a>
+          <button id="sidebar-toggle" class="icon-button" type="button" aria-label="Ranger la barre latérale" title="Ranger la barre latérale">
+            <svg class="icon ic-desktop" aria-hidden="true"><use href="#i-panel"/></svg>
+            <svg class="icon ic-mobile" aria-hidden="true"><use href="#i-close"/></svg>
+          </button>
+        </div>
+
+        <div class="search-wrap">
+          <label class="sr-only" for="friend-search">Chercher un ami par son identifiant</label>
+          <svg class="icon search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+          <input id="friend-search" type="search" placeholder="Chercher un ami (@pseudo)" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="search">
+          <div id="search-results" class="search-results hidden" role="status"></div>
+        </div>
+
+        <section id="invitations-section" class="sidebar-section hidden">
+          <div class="section-heading"><span>Invitations</span><span id="invitation-count" class="count-pill">0</span></div>
+          <div id="invitations-list" class="invitations-list"></div>
+        </section>
+
+        <section class="sidebar-section conversations-section">
+          <div class="section-heading"><span>Messages</span><button id="new-message" class="section-action" type="button" aria-label="Chercher un ami" title="Chercher un ami"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg></button></div>
+          <div id="conversations-list" class="conversations-list"></div>
+          <div id="empty-conversations" class="empty-sidebar">
+            <div class="empty-art" aria-hidden="true"><i></i><i></i></div>
+            <p>Aucune conversation pour l’instant. Cherchez un ami pour dire bonjour.</p>
+            <button id="find-friends" class="text-button" type="button">Trouver un ami</button>
+          </div>
+        </section>
+
+        <div class="profile-bar">
+          <div id="profile-avatar" class="avatar avatar-small is-me" aria-hidden="true">?</div>
+          <div class="profile-details"><strong id="profile-name">Mon compte</strong><span id="profile-handle">@membre</span></div>
+          <button id="notif-button" class="icon-button" type="button" aria-pressed="false" title="Notifications" aria-label="Activer les notifications"><svg class="icon" aria-hidden="true"><use href="#i-bell"/></svg></button>
+          <button class="icon-button theme-toggle" type="button" data-theme-toggle aria-label="Passer au thème sombre" title="Thème sombre">
+            <svg class="icon icon-moon" aria-hidden="true"><use href="#i-moon"/></svg>
+            <svg class="icon icon-sun" aria-hidden="true"><use href="#i-sun"/></svg>
+          </button>
+          <button id="logout-button" class="icon-button" type="button" title="Se déconnecter" aria-label="Se déconnecter"><svg class="icon" aria-hidden="true"><use href="#i-logout"/></svg></button>
+        </div>
+      </aside>
+
+      <main class="chat-area">
+        <section id="chat-content" class="chat-content">
+          <div id="welcome-panel" class="welcome-panel">
+            <div class="panel-tools">
+              <button class="icon-button open-sidebar" type="button" data-sidebar-open aria-controls="sidebar" aria-expanded="false" aria-label="Afficher les conversations" title="Afficher les conversations">
+                <svg class="icon ic-desktop" aria-hidden="true"><use href="#i-panel"/></svg>
+                <svg class="icon ic-mobile" aria-hidden="true"><use href="#i-menu"/></svg>
+              </button>
+              <button class="icon-button theme-toggle" type="button" data-theme-toggle aria-label="Passer au thème sombre" title="Thème sombre">
+                <svg class="icon icon-moon" aria-hidden="true"><use href="#i-moon"/></svg>
+                <svg class="icon icon-sun" aria-hidden="true"><use href="#i-sun"/></svg>
+              </button>
+            </div>
+            <div class="welcome-art" aria-hidden="true">
+              <i class="wa-a"></i><i class="wa-b"></i><i class="wa-lens"></i>
+              <span class="wa-bubble wa-them">Salut !</span>
+              <span class="wa-bubble wa-me">Coucou, ça va ?</span>
+            </div>
+            <h1>Les conversations commencent ici.</h1>
+            <p>Choisissez un ami dans la liste, ou cherchez son identifiant pour lui dire bonjour.</p>
+            <button id="welcome-find-friend" class="button button-primary" type="button">Trouver un ami</button>
+          </div>
+
+          <section id="conversation-panel" class="conversation-panel hidden">
+            <header class="conversation-header">
+              <button class="icon-button open-sidebar" type="button" data-sidebar-open aria-controls="sidebar" aria-expanded="false" aria-label="Afficher les conversations" title="Afficher les conversations">
+                <svg class="icon ic-desktop" aria-hidden="true"><use href="#i-panel"/></svg>
+                <svg class="icon ic-mobile" aria-hidden="true"><use href="#i-back"/></svg>
+              </button>
+              <div id="conversation-avatar" class="avatar" aria-hidden="true">A</div>
+              <div class="conversation-person"><strong id="conversation-name">Ami</strong><span id="conversation-handle">@ami</span></div>
+              <button class="icon-button theme-toggle" type="button" data-theme-toggle aria-label="Passer au thème sombre" title="Thème sombre">
+                <svg class="icon icon-moon" aria-hidden="true"><use href="#i-moon"/></svg>
+                <svg class="icon icon-sun" aria-hidden="true"><use href="#i-sun"/></svg>
+              </button>
+            </header>
+            <div id="message-list" class="message-list" role="log" aria-live="polite" aria-label="Messages de la conversation"></div>
+            <div class="composer-zone">
+              <div id="image-preview" class="image-preview hidden">
+                <img id="image-preview-img" alt="Photo à envoyer">
+                <button id="image-remove" class="image-remove" type="button" aria-label="Retirer la photo"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+              </div>
+              <form id="message-form" class="composer">
+                <input id="image-input" class="sr-only" type="file" accept="image/*" tabindex="-1">
+                <button id="attach-button" class="icon-button attach-button" type="button" title="Envoyer une photo" aria-label="Envoyer une photo"><svg class="icon" aria-hidden="true"><use href="#i-image"/></svg></button>
+                <label class="sr-only" for="message-input">Votre message</label>
+                <textarea id="message-input" rows="1" maxlength="4000" placeholder="Écrivez un message…"></textarea>
+                <button class="send-button" type="submit" aria-label="Envoyer le message" title="Envoyer le message"><svg class="icon" aria-hidden="true"><use href="#i-send"/></svg></button>
+              </form>
+              <p class="composer-hint">Entrée pour envoyer, Maj + Entrée pour un retour à la ligne.</p>
+              <p id="message-error" class="message-error" role="status" aria-live="polite"></p>
+            </div>
+          </section>
+        </section>
+      </main>
+      <div id="lightbox" class="lightbox hidden" role="dialog" aria-label="Photo"><img id="lightbox-img" alt="Photo agrandie"></div>
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    </div>
+  </body>
+</html>
