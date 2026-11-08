@@ -27,6 +27,11 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 
+// Notifications hors-ligne : facultatives, le site fonctionne sans.
+const pushConfig = await import("./push-config.js").then((m) => m.pushConfig).catch(() => null);
+const serviceWorkerReady =
+  "serviceWorker" in navigator ? navigator.serviceWorker.register("./sw.js").catch(() => null) : Promise.resolve(null);
+
 const authScreen = document.querySelector("#auth-screen");
 const appScreen = document.querySelector("#app-screen");
 const authPanels = {
@@ -54,6 +59,8 @@ const state = {
   searchSeq: 0,
   seenMessages: null,
   pendingImage: null,
+  pushActive: false,
+  pendingOpen: new URLSearchParams(location.search).get("open"),
   lastMessageIds: [],
 };
 const baseTitle = document.title;
@@ -315,6 +322,11 @@ function subscribeToFriendships() {
       maybeMarkRead();
       events.forEach(announce);
       updateBadge();
+      if (state.pendingOpen) {
+        const target = state.pendingOpen;
+        state.pendingOpen = null;
+        if (state.conversations.some((c) => c.user.id === target)) openConversation(target);
+      }
     },
     (error) => showToast(firebaseErrorMessage(error)),
   );
@@ -552,6 +564,7 @@ async function initializeWorkspace() {
   renderConversations([]);
   renderInvitations([]);
   subscribeToFriendships();
+  syncPushSubscription();
 }
 
 /* ---------- Affichage des listes ---------- */
@@ -648,7 +661,9 @@ async function respondToInvitation(id, action) {
   try {
     const reference = doc(state.db, "friendships", id);
     if (action === "accept") {
+      const inviter = state.friendships.get(id)?.from;
       await updateDoc(reference, { status: "accepted" });
+      if (inviter) notifyPeer("accepted", inviter);
       showToast("Invitation acceptée. Vous pouvez discuter.");
     } else {
       await deleteDoc(reference);
@@ -786,6 +801,7 @@ async function sendInvitation(user, button) {
       readAt: {},
     });
     showToast("Invitation envoyée.");
+    notifyPeer("invite", user.id);
     const status = document.createElement("span");
     status.className = "search-status";
     status.textContent = "Invitation envoyée";
@@ -965,6 +981,7 @@ async function sendMessage(event) {
       lastSenderId: state.user.id,
     });
     await batch.commit();
+    notifyPeer("message", state.activePeerId, image ? `📷 ${body || "Photo"}` : body);
     input.value = "";
     clearPendingImage();
     resizeComposer(input);
@@ -1133,6 +1150,7 @@ async function toggleNotifications() {
   }
   if (notificationsEnabled()) {
     try { localStorage.setItem(NOTIF_KEY, "0"); } catch {}
+    await unregisterPush().catch(() => {});
     syncNotifButton();
     showToast("Notifications désactivées.");
     return;
@@ -1145,7 +1163,8 @@ async function toggleNotifications() {
   }
   try { localStorage.setItem(NOTIF_KEY, "1"); } catch {}
   syncNotifButton();
-  showToast("Notifications activées.");
+  const pushed = await syncPushSubscription();
+  showToast(pushed ? "Notifications activées, même site fermé." : "Notifications activées.");
 }
 
 function announce(event) {
@@ -1167,17 +1186,88 @@ function announce(event) {
   }
   if (watching) {
     showToast(event.kind === "message" ? `${name} : ${body}` : `${title} — ${body}`);
-  } else if (notificationsEnabled()) {
-    try {
-      const n = new Notification(title, { body, icon: "./icon.svg", tag: `two-${event.kind}-${event.peerId}` });
-      n.onclick = () => {
-        window.focus();
-        if (event.kind === "message") openConversation(event.peerId);
-        n.close();
-      };
-    } catch {}
+  } else if (notificationsEnabled() && !state.pushActive) {
+    showSystemNotification(title, body, event);
   }
 }
+
+async function showSystemNotification(title, body, event) {
+  const options = { body, icon: "./icon-192.png", tag: `two-${event.kind}-${event.peerId}`, data: { peerId: event.peerId } };
+  try {
+    const registration = await serviceWorkerReady;
+    if (registration) {
+      await registration.showNotification(title, options);
+      return;
+    }
+    const n = new Notification(title, options);
+    n.onclick = () => {
+      window.focus();
+      if (event.kind === "message") openConversation(event.peerId);
+      n.close();
+    };
+  } catch {}
+}
+
+/* ---------- Notifications hors-ligne (Web Push) ---------- */
+
+function pushIsConfigured() {
+  return Boolean(pushConfig?.workerUrl && pushConfig?.vapidPublicKey && "PushManager" in window);
+}
+
+function keyToBytes(base64url) {
+  const padded = (base64url + "=".repeat((4 - (base64url.length % 4)) % 4)).replace(/-/g, "+").replace(/_/g, "/");
+  return Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
+}
+
+async function callWorker(path, payload) {
+  const token = await state.auth?.currentUser?.getIdToken();
+  if (!token) throw new Error("non connecté");
+  const response = await fetch(`${pushConfig.workerUrl.replace(/\/$/, "")}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(`worker ${response.status}`);
+}
+
+async function syncPushSubscription() {
+  state.pushActive = false;
+  if (!pushIsConfigured() || !notificationsEnabled()) return false;
+  try {
+    const registration = await serviceWorkerReady;
+    if (!registration) return false;
+    const options = { userVisibleOnly: true, applicationServerKey: keyToBytes(pushConfig.vapidPublicKey) };
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe(options);
+    }
+    await callWorker("/subscribe", { subscription: subscription.toJSON() });
+    state.pushActive = true;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function unregisterPush() {
+  state.pushActive = false;
+  if (!pushIsConfigured()) return;
+  const registration = await serviceWorkerReady;
+  const subscription = await registration?.pushManager.getSubscription();
+  if (!subscription) return;
+  await callWorker("/unsubscribe", { endpoint: subscription.endpoint }).catch(() => {});
+  await subscription.unsubscribe().catch(() => {});
+}
+
+function notifyPeer(kind, peerId, text = "") {
+  if (!pushConfig?.workerUrl || !peerId) return;
+  callWorker("/notify", { kind, peerId, text: Array.from(text).slice(0, 140).join("") }).catch(() => {});
+}
+
+navigator.serviceWorker?.addEventListener("message", (event) => {
+  if (event.data?.type !== "open-conversation" || !event.data.peerId) return;
+  if (state.conversations.some((c) => c.user.id === event.data.peerId)) openConversation(event.data.peerId);
+});
 
 function updateBadge() {
   if (!state.user) return;
@@ -1286,6 +1376,7 @@ document.addEventListener("keydown", (event) => {
 });
 document.querySelector("#logout-button").addEventListener("click", async () => {
   try {
+    await unregisterPush().catch(() => {});
     if (state.auth) await signOut(state.auth);
   } catch (error) {
     showToast(firebaseErrorMessage(error));
